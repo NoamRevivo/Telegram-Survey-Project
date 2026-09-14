@@ -15,7 +15,7 @@ public class SurveyParticipant
         this.status = ParticipantStatus.NOT_STARTED;
     }
 
-    public CommunityUser getUser() { return user; }
+    public CommunityUser getUser() { return user;}
     public ParticipantStatus getStatus() { return status; }
     public int getAnsweredQuestionsCount() { return answersByQuestionId.size(); }
 

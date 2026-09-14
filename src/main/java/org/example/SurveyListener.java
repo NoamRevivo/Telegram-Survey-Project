@@ -2,19 +2,21 @@ package org.example;
 
 import java.util.List;
 
-public interface SurveyListener {
-    default void onCountdownTick(int secondsRemaining, boolean isPendingPhase) {
+public interface SurveyListener
+{
+    default void onCountdownTick(int secondsRemaining, boolean isPendingPhase)
+    {
     }
-
-    default void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
+    default void onSurveyStarted(Survey survey, List<SurveyParticipant> participants)
+    {
     }
-
-    default void onAnswerRecorded(SurveyParticipant participant) {
+    default void onAnswerRecorded(SurveyParticipant participant)
+    {
     }
-
-    default void onReminderDue(List<SurveyParticipant> unfinishedParticipants) {
+    default void onReminderDue(List<SurveyParticipant> unfinishedParticipants)
+    {
     }
-
-    default void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
+    default void onSurveyClosed(Survey survey, List<SurveyParticipant> participants)
+    {
     }
 }

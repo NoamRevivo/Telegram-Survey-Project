@@ -14,23 +14,18 @@ public class CommunityUser {
         this.username = username;
         this.joinedAt = LocalDateTime.now();
     }
-
     public long getTelegramId() {
         return telegramId;
     }
-
     public String getFirstName() {
         return firstName;
     }
-
     public String getUsername() {
         return username;
     }
-
     public LocalDateTime getJoinedAt() {
         return joinedAt;
     }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -38,12 +33,10 @@ public class CommunityUser {
         CommunityUser that = (CommunityUser) o;
         return telegramId == that.telegramId;
     }
-
     @Override
     public int hashCode() {
         return Objects.hash(telegramId);
     }
-
     @Override
     public String toString() {
         return firstName + " (@" + username + ")";

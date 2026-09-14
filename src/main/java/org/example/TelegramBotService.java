@@ -158,4 +158,3 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
         sendReminders(unfinishedParticipants);
     }
 }
-
