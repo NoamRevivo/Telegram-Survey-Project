@@ -51,7 +51,6 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
             handleCallbackQuery(update.getCallbackQuery());
         }
     }
-
     private void handleIncomingMessage(Message message) {
         String text = message.getText().trim();
         if (text.equalsIgnoreCase("/start") || text.equalsIgnoreCase("היי") || text.equalsIgnoreCase("hi")) {
