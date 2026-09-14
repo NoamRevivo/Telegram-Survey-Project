@@ -1,5 +1,8 @@
 package org.example;
 
+import javax.swing.*;
+import java.util.List;
+
 public class MainFrame extends JFrame {
 
     public MainFrame(CommunityManager communityManager, SurveyManager surveyManager, ChatGPTService chatGPTService) {
@@ -20,8 +23,6 @@ public class MainFrame extends JFrame {
 
         SurveyCreationPanel creationPanel = new SurveyCreationPanel(
                 surveyManager, chatGPTService, () -> tabs.setSelectedIndex(2));
-
-        // מעבר אוטומטי ללשונית "סקר פעיל" כשמתחיל סקר, ולשונית "תוצאות" כשהוא נסגר.
         surveyManager.addListener(new SurveyListener() {
             @Override
             public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
