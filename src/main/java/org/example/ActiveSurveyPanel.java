@@ -6,12 +6,11 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
 
-public class ActiveSurveyPanel extends JPanel implements SurveyListener {
-
+public class ActiveSurveyPanel extends JPanel implements SurveyListener
+{
     private static final Color RED = new Color(255, 205, 205);
     private static final Color YELLOW = new Color(255, 245, 180);
     private static final Color GREEN = new Color(205, 255, 205);
-
     private final JLabel countdownLabel = new JLabel("--:--", SwingConstants.CENTER);
     private final JLabel totalLabel = new JLabel("סה\"כ משתתפים: 0");
     private final JLabel finishedLabel = new JLabel("סיימו: 0");
@@ -22,7 +21,8 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     private int totalQuestions;
     private java.util.List<SurveyParticipant> currentParticipants;
 
-    public ActiveSurveyPanel() {
+    public ActiveSurveyPanel()
+    {
         setLayout(new BorderLayout(10, 10));
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
@@ -30,13 +30,14 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         add(countdownLabel, BorderLayout.NORTH);
 
         JPanel statsPanel = new JPanel(new GridLayout(1, 3, 10, 10));
-        for (JLabel label : new JLabel[]{totalLabel, finishedLabel, pendingLabel}) {
+        for (JLabel label : new JLabel[]{totalLabel, finishedLabel, pendingLabel})
+        {
             label.setHorizontalAlignment(SwingConstants.CENTER);
             label.setBorder(BorderFactory.createLineBorder(Color.GRAY));
             statsPanel.add(label);
         }
-
-        tableModel = new DefaultTableModel(new Object[]{"שם", "התקדמות", "סטטוס"}, 0) {
+        tableModel = new DefaultTableModel(new Object[]{"שם", "התקדמות", "סטטוס"}, 0)
+        {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
@@ -45,13 +46,11 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         table = new JTable(tableModel);
         table.setRowHeight(26);
         table.setDefaultRenderer(Object.class, new StatusRowRenderer());
-
         JPanel centerPanel = new JPanel(new BorderLayout(10, 10));
         centerPanel.add(statsPanel, BorderLayout.NORTH);
         centerPanel.add(new JScrollPane(table), BorderLayout.CENTER);
         add(centerPanel, BorderLayout.CENTER);
     }
-
     @Override
     public void onCountdownTick(int secondsRemaining, boolean isPendingPhase) {
         SwingUtilities.invokeLater(() -> {
@@ -61,7 +60,6 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
                     : "זמן לסיום הסקר: " + mmss);
         });
     }
-
     @Override
     public void onSurveyStarted(Survey survey, java.util.List<SurveyParticipant> participants) {
         this.totalQuestions = survey.getQuestions().size();
@@ -81,7 +79,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
             String name = participant.getUser().toString();
             for (int row = 0; row < tableModel.getRowCount(); row++) {
                 if (tableModel.getValueAt(row, 0).equals(name)) {
-                    tableModel.setValueAt(participant.getAnsweredCount() + "/" + totalQuestions, row, 1);
+                    tableModel.setValueAt(participant.getAnsweredQuestionsCount() + "/" + totalQuestions, row, 1);
                     tableModel.setValueAt(statusLabelFor(participant), row, 2);
                     break;
                 }
@@ -99,7 +97,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         if (participant.isCompleted()) {
             return "השלים";
         }
-        return participant.getAnsweredCount() > 0 ? "בתהליך" : "טרם ענה";
+        return participant.getAnsweredQuestionsCount() > 0 ? "בתהליך" : "טרם ענה";
     }
 
     private void refreshStats() {
@@ -112,7 +110,6 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         pendingLabel.setText("טרם סיימו: " + (currentParticipants.size() - finished));
     }
 
-    /** צובע כל שורה לפי הסטטוס בעמודה השלישית: אדום = טרם ענה, צהוב = בתהליך, ירוק = השלים. */
     private static class StatusRowRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
