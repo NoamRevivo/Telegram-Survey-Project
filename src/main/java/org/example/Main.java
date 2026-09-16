@@ -11,8 +11,7 @@ public class Main
     public static void main(String[] args) {
         CommunityManager communityManager = new CommunityManager();
         SurveyManager surveyManager = new SurveyManager(communityManager);
-        ChatGPTService chatGPTService = new ChatGPTService(System.getenv("OPENAI_API_KEY"));
-    //    System.out.println("DEBUG >>> USERNAME=[" + System.getenv("BOT_USERNAME") + "] TOKEN=[" + System.getenv("BOT_TOKEN") + "]");
+        ChatGPTService chatGPTService = new ChatGPTService();
         TelegramBotService botService = new TelegramBotService(
                 System.getenv("BOT_USERNAME"),
                 System.getenv("BOT_TOKEN"),
