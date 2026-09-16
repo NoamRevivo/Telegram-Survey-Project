@@ -7,6 +7,8 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.HttpUrl;
+
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,7 +19,11 @@ public class ChatGPTService {
     private final OkHttpClient client;
 
     public ChatGPTService() {
-        this.client = new OkHttpClient();
+        this.client = new OkHttpClient.Builder()
+                .connectTimeout(Duration.ofSeconds(30))
+                .readTimeout(Duration.ofSeconds(30))
+                .writeTimeout(Duration.ofSeconds(30))
+                .build();
     }
 
     public List<Question> generateSurvey(String topic) throws Exception {
