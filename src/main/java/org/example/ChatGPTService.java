@@ -3,88 +3,73 @@ package org.example;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.HttpUrl;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ChatGPTService {
 
-    private static final String API_URL = "https://api.openai.com/v1/chat/completions";
-    private static final String MODEL = "gpt-4o-mini";
+    private static final String API_ENDPOINT = "https://shaitest-production-3066.up.railway.app/api-request";
+    private static final String TOKEN = System.getenv("SURVEY_API_TOKEN");
+    private final OkHttpClient client;
 
-    private final String apiKey;
-    private final HttpClient httpClient;
-
-    public ChatGPTService(String apiKey) {
-        this.apiKey = apiKey;
-        this.httpClient = HttpClient.newHttpClient();
+    public ChatGPTService() {
+        this.client = new OkHttpClient();
     }
 
-    public List<Question> generateSurvey(String topic) throws IOException, InterruptedException {
-        JSONObject payload = buildRequestPayload(topic);
+    public List<Question> generateSurvey(String topic) throws Exception {
+        String prompt = "Create a survey with 1-3 questions about: " + topic +
+                "\nFor each question, provide 2-4 answer options.\n" +
+                "Return ONLY valid JSON with this format:\n" +
+                "{\"questions\": [{\"text\": \"question?\", \"options\": [\"a\", \"b\"]}, ...]}";
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(API_URL))
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
-                .POST(HttpRequest.BodyPublishers.ofString(payload.toString()))
+        HttpUrl url = HttpUrl.parse(API_ENDPOINT).newBuilder()
+                .addQueryParameter("token", TOKEN)
+                .addQueryParameter("text", prompt)
                 .build();
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        Request req = new Request.Builder()
+                .url(url)
+                .build();
 
-        if (response.statusCode() != 200) {
-            throw new IOException("ChatGPT API החזיר שגיאה: " + response.statusCode() + " - " + response.body());
+        try (Response response = client.newCall(req).execute()) {
+            if (!response.isSuccessful()) {
+                throw new RuntimeException("API Error: " + response.code());
+            }
+
+            String responseBody = response.body().string();
+            return parseQuestions(responseBody);
         }
-        return parseQuestions(response.body());
     }
 
-    private JSONObject buildRequestPayload(String topic) {
-        JSONObject payload = new JSONObject();
-        payload.put("model", MODEL);
-        payload.put("temperature", 0.7);
+    private List<Question> parseQuestions(String responseBody) {
+        List<Question> questions = new ArrayList<>();
 
-        JSONArray messages = new JSONArray();
-        messages.put(new JSONObject()
-                .put("role", "user")
-                .put("content", buildPrompt(topic)));
-        payload.put("messages", messages);
-        return payload;
-    }
+        JSONObject json = new JSONObject(responseBody);
 
-    private String buildPrompt(String topic) {
-        return "צור סקר קצר בנושא: \"" + topic + "\". "
-                + "החזר אך ורק JSON תקני (ללא טקסט נוסף, ללא markdown) במבנה המדויק הבא: "
-                + "{\"questions\":[{\"text\":\"...\",\"options\":[\"...\",\"...\"]}]}. "
-                + "כמות השאלות חייבת להיות בין 1 ל-3, וכמות האפשרויות לכל שאלה בין 2 ל-4. "
-                + "כל הטקסטים בעברית.";
-    }
+        if (json.has("value")) {
+            String value = json.getString("value");
+            json = new JSONObject(value);
+        }
 
-    private List<Question> parseQuestions(String rawApiResponse) {
-        JSONObject root = new JSONObject(rawApiResponse);
-        String content = root.getJSONArray("choices")
-                .getJSONObject(0)
-                .getJSONObject("message")
-                .getString("content");
+        JSONArray questionsArray = json.getJSONArray("questions");
 
-        JSONObject parsedContent = new JSONObject(content);
-        JSONArray questionsArray = parsedContent.getJSONArray("questions");
-
-        List<Question> result = new ArrayList<>();
         for (int i = 0; i < questionsArray.length(); i++) {
-            JSONObject questionObject = questionsArray.getJSONObject(i);
-            String text = questionObject.getString("text");
+            JSONObject q = questionsArray.getJSONObject(i);
+            String text = q.getString("text");
 
             List<String> options = new ArrayList<>();
-            JSONArray optionsArray = questionObject.getJSONArray("options");
+            JSONArray optionsArray = q.getJSONArray("options");
             for (int j = 0; j < optionsArray.length(); j++) {
                 options.add(optionsArray.getString(j));
             }
-            result.add(new Question(text, options));
+
+            questions.add(new Question(text, options));
         }
-        return result;
+
+        return questions;
     }
 }
