@@ -97,7 +97,6 @@ public class SurveyManager {
 
         countdownTask.set(task);
 
-        // התחל תזכורות
         ScheduledFuture<?> reminderTaskRef = scheduler.schedule(() -> {
             if (!reminderSent && isSurveyInProgress()) {
                 sendReminders();

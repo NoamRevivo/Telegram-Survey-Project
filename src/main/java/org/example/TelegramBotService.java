@@ -30,7 +30,7 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
         this.communityManager = communityManager;
         this.surveyManager = surveyManager;
         this.communityManager.addListener(this);
-        this.surveyManager.addListener(this);
+        this.surveyManager.addSurveyListener(this);
     }
 
     @Override

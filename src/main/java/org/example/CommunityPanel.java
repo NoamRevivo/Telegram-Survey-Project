@@ -34,7 +34,6 @@ public class CommunityPanel extends JPanel implements CommunityListener {
 
     @Override
     public void onMemberAdded(CommunityUser newUser, int newCommunitySize) {
-        // האירוע מגיע מ-thread של הבוט / הרשת - חובה לעדכן Swing רק דרך ה-EDT.
         SwingUtilities.invokeLater(() -> {
             tableModel.insertRow(0, new Object[]{
                     newUser.getFirstName(),

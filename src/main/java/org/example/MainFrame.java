@@ -18,12 +18,12 @@ public class MainFrame extends JFrame {
 
         ActiveSurveyPanel activeSurveyPanel = new ActiveSurveyPanel();
         ResultsPanel resultsPanel = new ResultsPanel();
-        surveyManager.addListener(activeSurveyPanel);
-        surveyManager.addListener(resultsPanel);
+        surveyManager.addSurveyListener(activeSurveyPanel);
+        surveyManager.addSurveyListener(resultsPanel);
 
         SurveyCreationPanel creationPanel = new SurveyCreationPanel(
                 surveyManager, chatGPTService, () -> tabs.setSelectedIndex(2));
-        surveyManager.addListener(new SurveyListener() {
+        surveyManager.addSurveyListener(new SurveyListener() {
             @Override
             public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
                 SwingUtilities.invokeLater(() -> tabs.setSelectedIndex(2));

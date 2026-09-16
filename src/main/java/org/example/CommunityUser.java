@@ -20,6 +20,11 @@ public class CommunityUser {
     public String getFirstName() {
         return firstName;
     }
+
+    public String getUsername() {
+        return username;
+    }
+
     public LocalDateTime getJoinedAt() {
         return joinedAt;
     }
