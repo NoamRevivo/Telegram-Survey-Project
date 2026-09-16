@@ -1,6 +1,7 @@
 package org.example;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -11,11 +12,16 @@ public class Survey {
     private LocalDateTime startTime;
 
     public Survey(List<Question> questions, int delayMinutes) {
-        this.questions = questions;
+        if (questions == null || questions.size() < 1 || questions.size() > 3) {
+            throw new IllegalArgumentException("סקר צריך להכיל 1-3 שאלות");
+        }
+        if (delayMinutes < 0) {
+            throw new IllegalArgumentException("זמן עיכוב לא יכול להיות שלילי");
+        }
+        this.questions = new ArrayList<>(questions);
         this.delayMinutes = delayMinutes;
         this.status = SurveyStatus.PENDING;
     }
-
     public List<Question> getQuestions() {
         return Collections.unmodifiableList(questions);
     }

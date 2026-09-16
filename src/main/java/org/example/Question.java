@@ -11,6 +11,12 @@ public class Question {
     private final List<String> options;
 
     public Question(String text, List<String> options) {
+        if (text == null || text.trim().isEmpty()) {
+            throw new IllegalArgumentException("שאלה לא יכולה להיות ריקה");
+        }
+        if (options == null || options.size() < 2 || options.size() > 4) {
+            throw new IllegalArgumentException("כל שאלה צריכה 2-4 אפשרויות תשובה");
+        }
         this.id = UUID.randomUUID().toString();
         this.text = text;
         this.options = new ArrayList<>(options);

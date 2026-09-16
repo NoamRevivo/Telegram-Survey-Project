@@ -90,8 +90,6 @@ public class SurveyCreationPanel extends JPanel {
             questionsModel.addElement(question);
         }
     }
-
-    /** שולח בקשה ל-ChatGPTService ברקע (SwingWorker) כדי לא לחסום את ה-UI. */
     private void onGenerateWithChatGpt() {
         String topic = topicField.getText().trim();
         if (topic.isEmpty()) {
@@ -99,13 +97,11 @@ public class SurveyCreationPanel extends JPanel {
             return;
         }
         generateButton.setEnabled(false);
-
         new SwingWorker<java.util.List<Question>, Void>() {
             @Override
             protected java.util.List<Question> doInBackground() throws Exception {
                 return chatGPTService.generateSurvey(topic);
             }
-
             @Override
             protected void done() {
                 generateButton.setEnabled(true);
@@ -122,29 +118,36 @@ public class SurveyCreationPanel extends JPanel {
             }
         }.execute();
     }
-
     private void onStartSurvey() {
         if (questionsModel.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "יש להוסיף לפחות שאלה אחת לפני התחלת הסקר.");
+            JOptionPane.showMessageDialog(this,
+                    "הוסף לפחות שאלה אחת!",
+                    "שגיאה",
+                    JOptionPane.WARNING_MESSAGE);  // ← WARNING, לא ERROR
             return;
         }
-        List<Question> questions = new ArrayList<>();
-        for (int i = 0; i < questionsModel.size(); i++) {
-            questions.add(questionsModel.get(i));
-        }
-        int delayMinutes = parseDelay((String) delayCombo.getSelectedItem());
-
+        String delayLabel = (String) delayCombo.getSelectedItem();
+        int delayMinutes = parseDelay(delayLabel);
         try {
-            surveyManager.createSurvey(questions, delayMinutes);
-            questionsModel.clear();
-            if (onSurveyStartedCallback != null) {
-                onSurveyStartedCallback.run();
+            List<Question> questions = new ArrayList<>();
+            for (int i = 0; i < questionsModel.size(); i++) {
+                questions.add(questionsModel.getElementAt(i));
             }
-        } catch (IllegalStateException ex) {
-            JOptionPane.showMessageDialog(this, ex.getMessage());
+            surveyManager.createSurvey(questions, delayMinutes);
+            onSurveyStartedCallback.run();
+            questionsModel.clear();
+            JOptionPane.showMessageDialog(this,
+                    "הסקר התחיל בהצלחה!",
+                    "הצלחה",
+                    JOptionPane.INFORMATION_MESSAGE);
+        }
+        catch (IllegalStateException e) {
+            JOptionPane.showMessageDialog(this,
+                    e.getMessage(),
+                    "שגיאה",
+                    JOptionPane.ERROR_MESSAGE);
         }
     }
-
     private int parseDelay(String label) {
         if (label == null || label.equals("מיידי")) {
             return 0;

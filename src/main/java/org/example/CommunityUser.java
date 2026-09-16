@@ -20,12 +20,15 @@ public class CommunityUser {
     public String getFirstName() {
         return firstName;
     }
-    public String getUsername() {
-        return username;
-    }
     public LocalDateTime getJoinedAt() {
         return joinedAt;
     }
+    public String getUsernameDisplay() {
+    if (username == null || username.isEmpty()) {
+        return "ללא שם משתמש בטלגרם";
+    }
+    return "@" + username;
+}
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -39,6 +42,6 @@ public class CommunityUser {
     }
     @Override
     public String toString() {
-        return firstName + " (@" + username + ")";
+        return firstName + " (@" + getUsernameDisplay() + ")";
     }
 }
