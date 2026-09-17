@@ -37,7 +37,7 @@ public class CommunityPanel extends JPanel implements CommunityListener {
         SwingUtilities.invokeLater(() -> {
             tableModel.insertRow(0, new Object[]{
                     newUser.getFirstName(),
-                    "@" + newUser.getUsername(),
+                    newUser.getUsernameDisplay(),
                     newUser.getJoinedAt().format(TIME_FORMAT)
             });
             totalMembersLabel.setText("סה\"כ חברים בקהילה: " + newCommunitySize);
