@@ -21,7 +21,7 @@ public class CommunityPanel extends JPanel implements CommunityListener {
         totalMembersLabel.setFont(totalMembersLabel.getFont().deriveFont(Font.BOLD, 18f));
         add(totalMembersLabel, BorderLayout.NORTH);
 
-        tableModel = new DefaultTableModel(new Object[]{"שם", "יוזרניים", "שעת הצטרפות"}, 0) {
+        tableModel = new DefaultTableModel(new Object[]{"שם", "שם משתמש בטלגרם", "שעת הצטרפות"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
