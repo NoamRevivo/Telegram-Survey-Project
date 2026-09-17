@@ -15,6 +15,7 @@ public class ResultsPanel extends JPanel implements SurveyListener {
         setLayout(new BorderLayout());
         lockedLabel.setFont(lockedLabel.getFont().deriveFont(Font.PLAIN, 16f));
         add(lockedLabel, BorderLayout.CENTER);
+        setLayout(new BorderLayout());
     }
 
     @Override

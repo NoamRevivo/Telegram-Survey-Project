@@ -15,6 +15,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.Random;
 
 public class TelegramBotService extends TelegramLongPollingBot implements CommunityListener, SurveyListener {
 
@@ -23,6 +26,13 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
     private final CommunityManager communityManager;
     private final SurveyManager surveyManager;
     private final ExecutorService notificationExecutor = Executors.newSingleThreadExecutor();
+    private static final Random RANDOM = new Random();
+    private static final String[] ALREADY_MEMBER_TEMPLATES = {
+            "%s, את/ה כבר איתנו! הצטרפת %s - אין צורך להצטרף שוב 😉",
+            "רגע, אני מכיר אותך! %s, כבר חבר/ה בקהילה מאז %s 🎉",
+            "%s, הקהילה כבר מכירה אותך (מאז %s) - תודה שאת/ה כאן! 💙",
+            "היי שוב %s! כבר סימנתי אותך ברשימה מאז %s - בוא/י נמשיך משם 🚀"
+    };
 
     public TelegramBotService(String botUsername,
                               String botToken,
@@ -62,8 +72,34 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
             boolean added = communityManager.addMember(from.getId(), from.getFirstName(), from.getUserName());
             if (added) {
                 sendText(message.getChatId(), "ברוך הבא לקהילה, " + from.getFirstName() + "!");
+            } else {
+                sendText(message.getChatId(), alreadyMemberMessage(from));
             }
         }
+    }
+
+    private String alreadyMemberMessage(User from) {
+        CommunityUser existing = communityManager.getMember(from.getId());
+        String sinceText = existing != null ? timeSinceJoined(existing.getJoinedAt()) : "כבר";
+        String template = ALREADY_MEMBER_TEMPLATES[RANDOM.nextInt(ALREADY_MEMBER_TEMPLATES.length)];
+        return String.format(template, from.getFirstName(), sinceText);
+    }
+
+    private String timeSinceJoined(LocalDateTime joinedAt) {
+        Duration duration = Duration.between(joinedAt, LocalDateTime.now());
+        long days = duration.toDays();
+        long hours = duration.toHours();
+        long minutes = duration.toMinutes();
+        if (days > 0) {
+            return "לפני " + days + (days == 1 ? " יום" : " ימים");
+        }
+        if (hours > 0) {
+            return "לפני " + hours + (hours == 1 ? " שעה" : " שעות");
+        }
+        if (minutes > 0) {
+            return "לפני " + minutes + (minutes == 1 ? " דקה" : " דקות");
+        }
+        return "ממש הרגע";
     }
 
     private void handleCallbackQuery(CallbackQuery callbackQuery) {
@@ -138,6 +174,9 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
     }
 
     private void sendQuestion(long chatId, Question question, int questionIndex) {
+        if (isFakeChatId(chatId)) {
+            return;
+        }
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
         message.setText(question.getText());
@@ -169,10 +208,17 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
     }
 
     private void sendText(long chatId, String text) {
+        if (isFakeChatId(chatId)) {
+            return;
+        }
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
         message.setText(text);
         safeExecute(message);
+    }
+
+    private boolean isFakeChatId(long chatId) {
+        return chatId < 0;
     }
 
     private void safeExecute(org.telegram.telegrambots.meta.api.methods.BotApiMethod<?> method) {

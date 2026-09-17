@@ -9,13 +9,18 @@ public class MemberJoinToast extends JWindow {
     private static final int HEIGHT = 56;
     private static final int VISIBLE_MILLIS = 2200;
 
+    private boolean opacitySupported = true;
+
     public MemberJoinToast(Window owner, String message) {
         super(owner);
         setSize(WIDTH, HEIGHT);
         setAlwaysOnTop(true);
+
+        boolean transparentBg = true;
         try {
             setBackground(new Color(0, 0, 0, 0));
         } catch (IllegalComponentStateException | UnsupportedOperationException ex) {
+            transparentBg = false;
         }
 
         JPanel bubble = new JPanel(new BorderLayout()) {
@@ -28,7 +33,10 @@ public class MemberJoinToast extends JWindow {
                 g2.dispose();
             }
         };
-        bubble.setOpaque(false);
+        bubble.setOpaque(!transparentBg);
+        if (!transparentBg) {
+            bubble.setBackground(UiTheme.BRAND_DARK_BLUE);
+        }
         bubble.setBorder(BorderFactory.createEmptyBorder(8, 18, 8, 18));
 
         JLabel label = new JLabel(message, SwingConstants.CENTER);
@@ -50,7 +58,7 @@ public class MemberJoinToast extends JWindow {
         int startY = ownerBounds.y + ownerBounds.height;
 
         setLocation(targetX, startY);
-        setOpacity(0f);
+        trySetOpacity(0f);
         setVisible(true);
 
         int steps = 12;
@@ -61,7 +69,7 @@ public class MemberJoinToast extends JWindow {
             float progress = Math.min(1f, step[0] / (float) steps);
             int y = (int) (startY + (targetY - startY) * progress);
             setLocation(targetX, y);
-            setOpacity(progress);
+            trySetOpacity(progress);
             if (progress >= 1f) {
                 riseTimer.stop();
                 scheduleFadeOut();
@@ -77,18 +85,34 @@ public class MemberJoinToast extends JWindow {
     }
 
     private void fadeOutAndClose() {
+        if (!opacitySupported) {
+            dispose();
+            return;
+        }
         int steps = 10;
         int[] step = {0};
         Timer fadeTimer = new Timer(20, null);
         fadeTimer.addActionListener(e -> {
             step[0]++;
             float opacity = Math.max(0f, 1f - step[0] / (float) steps);
-            setOpacity(opacity);
+            trySetOpacity(opacity);
             if (opacity <= 0f) {
                 fadeTimer.stop();
                 dispose();
             }
         });
         fadeTimer.start();
+    }
+
+    private void trySetOpacity(float value) {
+        if (!opacitySupported) {
+            return;
+        }
+        try {
+            setOpacity(value);
+        } catch (IllegalComponentStateException | UnsupportedOperationException | IllegalArgumentException ex) {
+            opacitySupported = false;
+            System.err.println("שקיפות חלון לא נתמכת בסביבה זו - הבועה תוצג ללא אפקט דהייה.");
+        }
     }
 }
