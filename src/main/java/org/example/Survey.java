@@ -6,14 +6,17 @@ import java.util.Collections;
 import java.util.List;
 
 public class Survey {
+    public static final int MIN_QUESTIONS = 1;
+    public static final int MAX_QUESTIONS = 3;
+
     private final List<Question> questions;
     private final int delayMinutes;
     private SurveyStatus status;
     private LocalDateTime startTime;
 
     public Survey(List<Question> questions, int delayMinutes) {
-        if (questions == null || questions.size() < 1 || questions.size() > 3) {
-            throw new IllegalArgumentException("סקר צריך להכיל 1-3 שאלות");
+        if (questions == null || questions.size() < MIN_QUESTIONS || questions.size() > MAX_QUESTIONS) {
+            throw new IllegalArgumentException("סקר צריך להכיל " + MIN_QUESTIONS + "-" + MAX_QUESTIONS + " שאלות");
         }
         if (delayMinutes < 0) {
             throw new IllegalArgumentException("זמן עיכוב לא יכול להיות שלילי");
@@ -53,4 +56,3 @@ public class Survey {
                 .orElse(null);
     }
 }
-

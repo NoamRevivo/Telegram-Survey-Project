@@ -29,11 +29,11 @@ public class CommunityUser {
         return joinedAt;
     }
     public String getUsernameDisplay() {
-    if (username == null || username.isEmpty()) {
-        return "ללא שם משתמש בטלגרם";
+        if (username == null || username.isEmpty()) {
+            return "ללא שם משתמש בטלגרם";
+        }
+        return "@" + username;
     }
-    return "@" + username;
-}
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

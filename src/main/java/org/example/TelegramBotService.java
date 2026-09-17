@@ -10,6 +10,7 @@ import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiRequestException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -22,6 +23,7 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
     private final CommunityManager communityManager;
     private final SurveyManager surveyManager;
     private final ExecutorService notificationExecutor = Executors.newSingleThreadExecutor();
+
     public TelegramBotService(String botUsername,
                               String botToken,
                               CommunityManager communityManager,
@@ -52,6 +54,7 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
             handleCallbackQuery(update.getCallbackQuery());
         }
     }
+
     private void handleIncomingMessage(Message message) {
         String text = message.getText().trim();
         if (text.equalsIgnoreCase("/start") || text.equalsIgnoreCase("היי") || text.equalsIgnoreCase("hi")) {
@@ -66,16 +69,40 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
     private void handleCallbackQuery(CallbackQuery callbackQuery) {
         long userId = callbackQuery.getFrom().getId();
         String[] parts = callbackQuery.getData().split(":", 2);
-        if (parts.length != 2) {
-            return;
-        }
-        String questionId = parts[0];
-        String answer = parts[1];
-
-        SurveyManager.AnswerResult result = surveyManager.recordAnswer(userId, questionId, answer);
 
         AnswerCallbackQuery feedback = new AnswerCallbackQuery();
         feedback.setCallbackQueryId(callbackQuery.getId());
+
+        if (parts.length != 2) {
+            return;
+        }
+
+        int questionIndex;
+        int optionIndex;
+        try {
+            questionIndex = Integer.parseInt(parts[0]);
+            optionIndex = Integer.parseInt(parts[1]);
+        } catch (NumberFormatException nfe) {
+            return;
+        }
+
+        Survey survey = surveyManager.getCurrentSurvey();
+        if (survey == null || questionIndex < 0 || questionIndex >= survey.getQuestions().size()) {
+            feedback.setText("הסקר כבר הסתיים.");
+            feedback.setShowAlert(true);
+            safeExecute(feedback);
+            return;
+        }
+
+        Question question = survey.getQuestions().get(questionIndex);
+        List<String> options = question.getOptions();
+        if (optionIndex < 0 || optionIndex >= options.size()) {
+            return;
+        }
+        String answer = options.get(optionIndex);
+
+        SurveyManager.AnswerResult result = surveyManager.recordAnswer(userId, question.getId(), answer);
+
         feedback.setText(feedbackTextFor(result));
         feedback.setShowAlert(result != SurveyManager.AnswerResult.RECORDED);
         safeExecute(feedback);
@@ -100,29 +127,32 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
     }
 
     public void sendSurveyToParticipants(Survey survey, List<SurveyParticipant> participants) {
+        List<Question> questions = survey.getQuestions();
         for (SurveyParticipant participant : participants) {
             long chatId = participant.getUser().getTelegramId();
-            for (Question question : survey.getQuestions()) {
-                sendQuestion(chatId, question);
+            for (int questionIndex = 0; questionIndex < questions.size(); questionIndex++) {
+                sendQuestion(chatId, questions.get(questionIndex), questionIndex);
+                sleepMillis(400);
             }
         }
     }
 
-    private void sendQuestion(long chatId, Question question) {
+    private void sendQuestion(long chatId, Question question, int questionIndex) {
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
         message.setText(question.getText());
-        message.setReplyMarkup(buildKeyboardFor(question));
+        message.setReplyMarkup(buildKeyboardFor(question, questionIndex));
         safeExecute(message);
     }
 
-    private InlineKeyboardMarkup buildKeyboardFor(Question question) {
+    private InlineKeyboardMarkup buildKeyboardFor(Question question, int questionIndex) {
         InlineKeyboardMarkup markup = new InlineKeyboardMarkup();
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-        for (String option : question.getOptions()) {
+        List<String> options = question.getOptions();
+        for (int optionIndex = 0; optionIndex < options.size(); optionIndex++) {
             InlineKeyboardButton button = new InlineKeyboardButton();
-            button.setText(option);
-            button.setCallbackData(question.getId() + ":" + option);
+            button.setText(options.get(optionIndex));
+            button.setCallbackData(questionIndex + ":" + optionIndex);
 
             List<InlineKeyboardButton> row = new ArrayList<>();
             row.add(button);
@@ -148,9 +178,34 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
     private void safeExecute(org.telegram.telegrambots.meta.api.methods.BotApiMethod<?> method) {
         try {
             execute(method);
+        } catch (TelegramApiRequestException e) {
+            Integer retryAfter = e.getParameters() != null ? e.getParameters().getRetryAfter() : null;
+            if (retryAfter != null && retryAfter > 0) {
+                System.err.println("הגעה למגבלת קצב טלגרם, ממתין " + retryAfter + " שניות ומנסה שוב...");
+                sleepSeconds(retryAfter);
+                try {
+                    execute(method);
+                } catch (TelegramApiException retryEx) {
+                    System.err.println("שליחת הודעה נכשלה גם בניסיון החוזר: " + retryEx.getMessage());
+                }
+            } else {
+                System.err.println("שליחת הודעה בטלגרם נכשלה: " + e.getMessage());
+            }
         } catch (TelegramApiException e) {
-            e.printStackTrace();
+            System.err.println("שליחת הודעה בטלגרם נכשלה: " + e.getMessage());
         }
+    }
+
+    private void sleepMillis(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void sleepSeconds(int seconds) {
+        sleepMillis(seconds * 1000L);
     }
 
     @Override
@@ -158,14 +213,17 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
         notificationExecutor.submit(() ->
                 broadcastNewMember(newUser.getTelegramId(), newUser.getFirstName(), newCommunitySize));
     }
+
     @Override
     public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
         notificationExecutor.submit(() -> sendSurveyToParticipants(survey, participants));
     }
+
     @Override
     public void onReminderSent(List<SurveyParticipant> notCompleted) {
         notificationExecutor.submit(() -> sendReminders(notCompleted));
     }
+
     public void shutdown() {
         notificationExecutor.shutdownNow();
     }

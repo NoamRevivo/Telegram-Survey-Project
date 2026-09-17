@@ -9,6 +9,7 @@ public class SurveyManager {
 
     private static final int SURVEY_DURATION_SECONDS = 300;
     private static final int REMINDER_DELAY_SECONDS = 180;
+    public static final int MIN_COMMUNITY_SIZE = 3;
 
     private final CommunityManager communityManager;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
@@ -33,9 +34,8 @@ public class SurveyManager {
         if (isSurveyInProgress()) {
             throw new IllegalStateException("סקר פעיל כבר קיים. סיים אותו קודם.");
         }
-
-        if (communityManager.getCommunitySize() < 3) {
-            throw new IllegalStateException("צריכים לפחות 3 חברים בקהילה כדי להתחיל סקר.");
+        if (communityManager.getCommunitySize() < MIN_COMMUNITY_SIZE) {
+            throw new IllegalStateException("צריכים לפחות " + MIN_COMMUNITY_SIZE + " חברים בקהילה כדי להתחיל סקר.");
         }
         currentSurvey = new Survey(questions, delayMinutes);
         currentParticipants = new CopyOnWriteArrayList<>();
