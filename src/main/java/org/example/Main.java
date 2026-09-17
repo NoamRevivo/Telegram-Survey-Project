@@ -28,6 +28,9 @@ public class Main
         SwingUtilities.invokeLater(() -> {
             MainFrame frame = new MainFrame(communityManager, surveyManager, chatGPTService);
             frame.setVisible(true);
+              //  if ("true".equalsIgnoreCase(System.getenv("SEED_TEST_MEMBERS"))) {
+                communityManager.addMember(-1L, "בדיקה ראשונה", "test_user_1");
+                communityManager.addMember(-2L, "בדיקה שנייה", "test_user_2");
         });
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             surveyManager.shutdown();
