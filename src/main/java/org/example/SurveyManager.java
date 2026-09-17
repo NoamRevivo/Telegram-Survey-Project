@@ -12,7 +12,6 @@ public class SurveyManager {
 
     private final CommunityManager communityManager;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
-    private final ScheduledExecutorService notificationExecutor = Executors.newScheduledThreadPool(2);
 
     private Survey currentSurvey;
     private List<SurveyParticipant> currentParticipants;
@@ -37,9 +36,6 @@ public class SurveyManager {
 
         if (communityManager.getCommunitySize() < 3) {
             throw new IllegalStateException("צריכים לפחות 3 חברים בקהילה כדי להתחיל סקר.");
-        }
-        for (CommunityUser user : communityManager.getAllMembers()) {
-            currentParticipants.add(new SurveyParticipant(user));
         }
         currentSurvey = new Survey(questions, delayMinutes);
         currentParticipants = new CopyOnWriteArrayList<>();
@@ -97,11 +93,8 @@ public class SurveyManager {
 
         countdownTask.set(task);
 
-        ScheduledFuture<?> reminderTaskRef = scheduler.schedule(() -> {
-            if (!reminderSent && isSurveyInProgress()) {
-                sendReminders();
-            }
-        }, REMINDER_DELAY_SECONDS, TimeUnit.SECONDS);
+        ScheduledFuture<?> reminderTaskRef = scheduler.schedule(
+                this::sendRemindersIfNeeded, REMINDER_DELAY_SECONDS, TimeUnit.SECONDS);
 
         reminderTask.set(reminderTaskRef);
     }
@@ -118,23 +111,26 @@ public class SurveyManager {
         }
     }
 
-    public synchronized void recordAnswer(long telegramId, String questionId, String answer) {
+    public enum AnswerResult { RECORDED, SURVEY_NOT_ACTIVE, ALREADY_ANSWERED, UNKNOWN_PARTICIPANT }
+    public synchronized AnswerResult recordAnswer(long telegramId, String questionId, String answer) {
         if (!isSurveyInProgress()) {
-            return;
+            return AnswerResult.SURVEY_NOT_ACTIVE;
         }
-
         SurveyParticipant participant = findParticipant(telegramId);
-        if (participant == null || participant.hasAnswered(questionId)) {
-            return;
+        if (participant == null) {
+            return AnswerResult.UNKNOWN_PARTICIPANT;
+        }
+        if (participant.hasAnswered(questionId)) {
+            return AnswerResult.ALREADY_ANSWERED;
         }
 
         participant.recordAnswer(questionId, answer, currentSurvey.getQuestions().size());
-
         notifyListenersAnswerRecorded(participant);
 
         if (allParticipantsCompleted()) {
             closeSurvey();
         }
+        return AnswerResult.RECORDED;
     }
 
     public synchronized void closeSurvey() {
@@ -170,16 +166,18 @@ public class SurveyManager {
         currentParticipants = null;
     }
 
-    private void sendReminders() {
+    private synchronized void sendRemindersIfNeeded() {
+        if (reminderSent || !isSurveyInProgress()) {
+            return;
+        }
         reminderSent = true;
-        List<SurveyParticipant> notCompleted = new ArrayList<>();
 
+        List<SurveyParticipant> notCompleted = new ArrayList<>();
         for (SurveyParticipant p : currentParticipants) {
             if (p.getStatus() != ParticipantStatus.COMPLETED) {
                 notCompleted.add(p);
             }
         }
-
         for (SurveyListener listener : surveyListeners) {
             listener.onReminderSent(notCompleted);
         }
@@ -233,6 +231,5 @@ public class SurveyManager {
 
     public void shutdown() {
         scheduler.shutdownNow();
-        notificationExecutor.shutdownNow();
     }
 }

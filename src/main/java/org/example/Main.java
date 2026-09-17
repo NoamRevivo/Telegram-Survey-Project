@@ -29,6 +29,9 @@ public class Main
             MainFrame frame = new MainFrame(communityManager, surveyManager, chatGPTService);
             frame.setVisible(true);
         });
-        Runtime.getRuntime().addShutdownHook(new Thread(surveyManager::shutdown));
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            surveyManager.shutdown();
+            botService.shutdown();
+        }));
     }
 }

@@ -47,6 +47,6 @@ public class CommunityUser {
     }
     @Override
     public String toString() {
-        return firstName + " (@" + getUsernameDisplay() + ")";
+        return firstName + " (" + getUsernameDisplay() + ")";
     }
 }

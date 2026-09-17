@@ -5,7 +5,8 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
-
+import java.util.HashMap;
+import java.util.Map;
 public class ActiveSurveyPanel extends JPanel implements SurveyListener
 {
     private static final Color RED = new Color(255, 205, 205);
@@ -20,7 +21,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
 
     private int totalQuestions;
     private java.util.List<SurveyParticipant> currentParticipants;
-
+    private final Map<Long, Integer> rowByTelegramId = new HashMap<>();
     public ActiveSurveyPanel()
     {
         setLayout(new BorderLayout(10, 10));
@@ -66,8 +67,11 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
         this.currentParticipants = participants;
         SwingUtilities.invokeLater(() -> {
             tableModel.setRowCount(0);
+            rowByTelegramId.clear();
+            int row = 0;
             for (SurveyParticipant p : participants) {
                 tableModel.addRow(new Object[]{p.getUser().toString(), "0/" + totalQuestions, "טרם ענה"});
+                rowByTelegramId.put(p.getUser().getTelegramId(), row++);
             }
             refreshStats();
         });
@@ -76,13 +80,10 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
     @Override
     public void onAnswerRecorded(SurveyParticipant participant) {
         SwingUtilities.invokeLater(() -> {
-            String name = participant.getUser().toString();
-            for (int row = 0; row < tableModel.getRowCount(); row++) {
-                if (tableModel.getValueAt(row, 0).equals(name)) {
-                    tableModel.setValueAt(participant.getAnsweredQuestionsCount() + "/" + totalQuestions, row, 1);
-                    tableModel.setValueAt(statusLabelFor(participant), row, 2);
-                    break;
-                }
+            Integer row = rowByTelegramId.get(participant.getUser().getTelegramId());
+            if (row != null) {
+                tableModel.setValueAt(participant.getAnsweredQuestionsCount() + "/" + totalQuestions, row, 1);
+                tableModel.setValueAt(statusLabelFor(participant), row, 2);
             }
             refreshStats();
         });

@@ -10,9 +10,10 @@ import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
-
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class TelegramBotService extends TelegramLongPollingBot implements CommunityListener, SurveyListener {
 
@@ -20,7 +21,7 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
     private final String botToken;
     private final CommunityManager communityManager;
     private final SurveyManager surveyManager;
-
+    private final ExecutorService notificationExecutor = Executors.newSingleThreadExecutor();
     public TelegramBotService(String botUsername,
                               String botToken,
                               CommunityManager communityManager,
@@ -71,13 +72,22 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
         String questionId = parts[0];
         String answer = parts[1];
 
-        surveyManager.recordAnswer(userId, questionId, answer);
+        SurveyManager.AnswerResult result = surveyManager.recordAnswer(userId, questionId, answer);
 
         AnswerCallbackQuery feedback = new AnswerCallbackQuery();
         feedback.setCallbackQueryId(callbackQuery.getId());
-        feedback.setText("תשובתך נקלטה!");
-        feedback.setShowAlert(false);
+        feedback.setText(feedbackTextFor(result));
+        feedback.setShowAlert(result != SurveyManager.AnswerResult.RECORDED);
         safeExecute(feedback);
+    }
+
+    private String feedbackTextFor(SurveyManager.AnswerResult result) {
+        switch (result) {
+            case RECORDED: return "תשובתך נקלטה!";
+            case ALREADY_ANSWERED: return "כבר ענית על שאלה זו.";
+            case SURVEY_NOT_ACTIVE: return "הסקר כבר הסתיים.";
+            default: return "לא ניתן לקלוט את התשובה.";
+        }
     }
 
     public void broadcastNewMember(long newMemberId, String name, int newSize) {
@@ -145,16 +155,18 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
 
     @Override
     public void onMemberAdded(CommunityUser newUser, int newCommunitySize) {
-        broadcastNewMember(newUser.getTelegramId(), newUser.getFirstName(), newCommunitySize);
+        notificationExecutor.submit(() ->
+                broadcastNewMember(newUser.getTelegramId(), newUser.getFirstName(), newCommunitySize));
     }
-
     @Override
     public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
-        sendSurveyToParticipants(survey, participants);
+        notificationExecutor.submit(() -> sendSurveyToParticipants(survey, participants));
     }
-
     @Override
-    public void onReminderDue(List<SurveyParticipant> unfinishedParticipants) {
-        sendReminders(unfinishedParticipants);
+    public void onReminderSent(List<SurveyParticipant> notCompleted) {
+        notificationExecutor.submit(() -> sendReminders(notCompleted));
+    }
+    public void shutdown() {
+        notificationExecutor.shutdownNow();
     }
 }
