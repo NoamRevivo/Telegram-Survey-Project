@@ -47,7 +47,8 @@ public class MainFrame extends JFrame {
                 surveyActive = true;
                 SwingUtilities.invokeLater(() -> {
                     tabs.setSelectedIndex(2);
-                    tabs.setTitleAt(2, "🔴  סקר פעיל (חי)");
+                    tabs.setIconAt(2, AppIcons.live(20));
+                    tabs.setTitleAt(2, "סקר פעיל (חי)");
                     refreshStatusBar();
                 });
             }
@@ -57,16 +58,17 @@ public class MainFrame extends JFrame {
                 surveyActive = false;
                 SwingUtilities.invokeLater(() -> {
                     tabs.setSelectedIndex(3);
-                    tabs.setTitleAt(2, "📊  סקר פעיל");
+                    tabs.setIconAt(2, AppIcons.active(20));
+                    tabs.setTitleAt(2, "סקר פעיל");
                     refreshStatusBar();
                 });
             }
         });
 
-        tabs.addTab("👥  קהילה", communityPanel);
-        tabs.addTab("📝  יצירת סקר", creationPanel);
-        tabs.addTab("📊  סקר פעיל", activeSurveyPanel);
-        tabs.addTab("🏆  תוצאות", resultsPanel);
+        tabs.addTab("קהילה", AppIcons.community(20), communityPanel);
+        tabs.addTab("יצירת סקר", AppIcons.create(20), creationPanel);
+        tabs.addTab("סקר פעיל", AppIcons.active(20), activeSurveyPanel);
+        tabs.addTab("תוצאות", AppIcons.results(20), resultsPanel);
 
         add(tabs, BorderLayout.CENTER);
         add(buildStatusBar(), BorderLayout.SOUTH);
@@ -78,7 +80,8 @@ public class MainFrame extends JFrame {
         header.setBackground(UiTheme.BRAND_BLUE);
         header.setBorder(BorderFactory.createEmptyBorder(14, 22, 14, 22));
 
-        JLabel title = new JLabel("🤖  Telegram Survey Bot — לוח בקרה");
+        JLabel title = new JLabel("Telegram Survey Bot — לוח בקרה", AppIcons.robotOnLight(32), SwingConstants.LEADING);
+        title.setIconTextGap(12);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 22f));
         title.setForeground(Color.WHITE);
         header.add(title, BorderLayout.WEST);
