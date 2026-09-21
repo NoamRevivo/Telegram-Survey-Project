@@ -81,9 +81,9 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
 
     @Override
     public void onSurveyStarted(Survey survey, java.util.List<SurveyParticipant> participants) {
-        this.totalQuestions = survey.getQuestions().size();
-        this.currentParticipants = participants;
         SwingUtilities.invokeLater(() -> {
+            this.totalQuestions = survey.getQuestions().size();
+            this.currentParticipants = participants;
             tableModel.setRowCount(0);
             rowByTelegramId.clear();
             int row = 0;
@@ -134,7 +134,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
                                                        boolean hasFocus, int row, int column) {
             Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            Object status = table.getModel().getValueAt(row, 2);
+            Object status = table.getModel().getValueAt(table.convertRowIndexToModel(row), 2);
             if ("השלים".equals(status)) {
                 c.setBackground(GREEN);
             } else if ("בתהליך".equals(status)) {

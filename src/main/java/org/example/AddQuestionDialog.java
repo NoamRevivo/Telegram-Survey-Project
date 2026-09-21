@@ -2,6 +2,7 @@ package org.example;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,8 +19,6 @@ public class AddQuestionDialog extends JDialog {
     public AddQuestionDialog(Frame owner, Question existing) {
         super(owner, existing == null ? "➕ הוספת שאלה" : "✏️ עריכת שאלה", true);
         setLayout(new BorderLayout(10, 10));
-        setSize(440, 400);
-        setLocationRelativeTo(owner);
         ((JPanel) getContentPane()).setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
 
         JPanel top = new JPanel(new BorderLayout(6, 6));
@@ -30,14 +29,23 @@ public class AddQuestionDialog extends JDialog {
 
         JList<String> optionsList = new JList<>(optionsModel);
         JTextField optionField = new JTextField(15);
-        JButton addOptionButton = new JButton("הוסף אפשרות (עד 4)");
-        addOptionButton.addActionListener(e -> {
+        JButton addOptionButton = new JButton("הוסף אפשרות (עד " + Question.MAX_OPTIONS + ")");
+        Runnable addOption = () -> {
             String option = optionField.getText().trim();
-            if (!option.isEmpty() && optionsModel.size() < 4) {
+            if (option.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "אפשרות ריקה אינה חוקית.");
+            } else if (optionsModel.size() >= Question.MAX_OPTIONS) {
+                JOptionPane.showMessageDialog(this, "ניתן להזין עד " + Question.MAX_OPTIONS + " אפשרויות.");
+            } else if (containsOption(option)) {
+                JOptionPane.showMessageDialog(this, "האפשרות \"" + option + "\" כבר קיימת.");
+            } else {
                 optionsModel.addElement(option);
                 optionField.setText("");
             }
-        });
+            optionField.requestFocusInWindow();
+        };
+        addOptionButton.addActionListener(e -> addOption.run());
+        optionField.addActionListener(e -> addOption.run());   // Enter בשדה = הוספת אפשרות
         JButton removeOptionButton = new JButton("הסר אפשרות נבחרת");
         removeOptionButton.addActionListener(e -> {
             int index = optionsList.getSelectedIndex();
@@ -67,7 +75,12 @@ public class AddQuestionDialog extends JDialog {
 
         add(top, BorderLayout.NORTH);
         add(centerPanel, BorderLayout.CENTER);
-        add(confirmButton, BorderLayout.SOUTH);
+        JButton cancelButton = new JButton("ביטול");
+        cancelButton.addActionListener(e -> dispose());
+        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
+        buttonsPanel.add(confirmButton);
+        buttonsPanel.add(cancelButton);
+        add(buttonsPanel, BorderLayout.SOUTH);
 
         if (existing != null) {
             questionField.setText(existing.getText());
@@ -75,11 +88,20 @@ public class AddQuestionDialog extends JDialog {
                 optionsModel.addElement(option);
             }
         }
+
+        // L-03: Enter מאשר, Esc סוגר, גודל לפי התוכן. M-13: ימין-לשמאל
+        getRootPane().setDefaultButton(confirmButton);
+        getRootPane().registerKeyboardAction(e -> dispose(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
+        getContentPane().applyComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        pack();
+        setMinimumSize(getSize());
+        setLocationRelativeTo(owner);
     }
 
     private void onConfirm() {
         String text = questionField.getText().trim();
-        if (text.isEmpty() || optionsModel.size() < 2) {
+        if (text.isEmpty() || optionsModel.size() < Question.MIN_OPTIONS) {
             JOptionPane.showMessageDialog(this, "יש להזין טקסט שאלה ולפחות 2 אפשרויות תשובה.");
             return;
         }
@@ -87,8 +109,21 @@ public class AddQuestionDialog extends JDialog {
         for (int i = 0; i < optionsModel.size(); i++) {
             options.add(optionsModel.get(i));
         }
-        result = new Question(text, options);
-        dispose();
+        try {
+            result = new Question(text, options);
+            dispose();
+        } catch (IllegalArgumentException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage());
+        }
+    }
+
+    private boolean containsOption(String option) {
+        for (int i = 0; i < optionsModel.size(); i++) {
+            if (optionsModel.get(i).trim().equalsIgnoreCase(option)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Question showDialog() {

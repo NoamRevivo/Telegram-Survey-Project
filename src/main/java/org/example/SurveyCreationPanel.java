@@ -26,6 +26,8 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
     private final JButton startButton = new JButton("🚀 התחל סקר");
     private final JLabel communityStatusLabel = new JLabel();
     private final JLabel questionsCountLabel = new JLabel();
+    /** M-09: הדקות לפי אותו סדר של delayCombo — לא מפענחים מספרים מתוך הטקסט */
+    private static final int[] DELAY_MINUTES = {0, 1, 2, 5, 10};
     private final JComboBox<String> delayCombo =
             new JComboBox<>(new String[]{"מיידי", "1 דקה", "2 דקות", "5 דקות", "10 דקות"});
 
@@ -201,6 +203,9 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
             return;
         }
         generateButton.setEnabled(false);
+        generateButton.setText("⏳ יוצר שאלות…");   // M-04: חיווי טעינה
+        topicField.setEnabled(false);
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         new SwingWorker<java.util.List<Question>, Void>() {
             @Override
             protected java.util.List<Question> doInBackground() throws Exception {
@@ -218,9 +223,12 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
                         questionsModel.addElement(q);
                     }
                 } catch (Exception ex) {
+                    Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
                     JOptionPane.showMessageDialog(SurveyCreationPanel.this,
-                            "שגיאה ביצירת הסקר מול ChatGPT: " + ex.getMessage());
+                            "יצירת השאלות נכשלה: " + cause.getMessage(), "שגיאה", JOptionPane.ERROR_MESSAGE);
                 } finally {
+                    generateButton.setText("✨ צור סקר");
+                    setCursor(Cursor.getDefaultCursor());
                     onQuestionsChanged();
                 }
             }
@@ -234,8 +242,7 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
                     JOptionPane.WARNING_MESSAGE);
             return;
         }
-        String delayLabel = (String) delayCombo.getSelectedItem();
-        int delayMinutes = parseDelay(delayLabel);
+        int delayMinutes = DELAY_MINUTES[delayCombo.getSelectedIndex()];
         try {
             List<Question> questions = new ArrayList<>();
             for (int i = 0; i < questionsModel.size(); i++) {
@@ -255,11 +262,5 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
                     "שגיאה",
                     JOptionPane.ERROR_MESSAGE);
         }
-    }
-    private int parseDelay(String label) {
-        if (label == null || label.equals("מיידי")) {
-            return 0;
-        }
-        return Integer.parseInt(label.replaceAll("[^0-9]", ""));
     }
 }

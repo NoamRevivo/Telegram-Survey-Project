@@ -36,16 +36,16 @@ public class MainFrame extends JFrame {
                 surveyManager, communityManager, chatGPTService, () -> tabs.setSelectedIndex(2));
         communityManager.addListener(creationPanel);
 
-        communityManager.addListener((newUser, newSize) -> {
+        communityManager.addListener((newUser, newSize) -> SwingUtilities.invokeLater(() -> {
             communitySize = newSize;
-            SwingUtilities.invokeLater(this::refreshStatusBar);
-        });
+            refreshStatusBar();
+        }));
 
         surveyManager.addSurveyListener(new SurveyListener() {
             @Override
             public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
-                surveyActive = true;
                 SwingUtilities.invokeLater(() -> {
+                    surveyActive = true;
                     tabs.setSelectedIndex(2);
                     tabs.setIconAt(2, AppIcons.live(20));
                     tabs.setTitleAt(2, "סקר פעיל (חי)");
@@ -55,8 +55,8 @@ public class MainFrame extends JFrame {
 
             @Override
             public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
-                surveyActive = false;
                 SwingUtilities.invokeLater(() -> {
+                    surveyActive = false;
                     tabs.setSelectedIndex(3);
                     tabs.setIconAt(2, AppIcons.active(20));
                     tabs.setTitleAt(2, "סקר פעיל");
@@ -73,6 +73,7 @@ public class MainFrame extends JFrame {
         add(tabs, BorderLayout.CENTER);
         add(buildStatusBar(), BorderLayout.SOUTH);
         refreshStatusBar();
+        applyComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
     }
 
     private JPanel buildHeader() {

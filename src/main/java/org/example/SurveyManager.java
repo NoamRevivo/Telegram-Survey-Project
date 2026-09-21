@@ -4,8 +4,13 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class SurveyManager {
+
+    private static final Logger LOG = Logger.getLogger(SurveyManager.class.getName());
 
     private static final int SURVEY_DURATION_SECONDS = 300;
     private static final int REMINDER_DELAY_SECONDS = 180;
@@ -14,17 +19,17 @@ public class SurveyManager {
     private final CommunityManager communityManager;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
-    private Survey currentSurvey;
-    private List<SurveyParticipant> currentParticipants;
+    private volatile Survey currentSurvey;
+    private volatile List<SurveyParticipant> currentParticipants;
 
     private final AtomicReference<ScheduledFuture<?>> countdownTask = new AtomicReference<>();
     private final AtomicReference<ScheduledFuture<?>> reminderTask = new AtomicReference<>();
     private final AtomicReference<ScheduledFuture<?>> timeoutTask = new AtomicReference<>();
 
     private final CopyOnWriteArrayList<SurveyListener> surveyListeners = new CopyOnWriteArrayList<>();
-    private int secondsRemaining;
-    private boolean reminderSent;
-    private boolean isPendingPhase;
+    private volatile int secondsRemaining;
+    private volatile boolean reminderSent;
+    private volatile boolean isPendingPhase;
 
     public SurveyManager(CommunityManager communityManager) {
         this.communityManager = communityManager;
@@ -40,10 +45,6 @@ public class SurveyManager {
         currentSurvey = new Survey(questions, delayMinutes);
         currentParticipants = new CopyOnWriteArrayList<>();
 
-        for (CommunityUser user : communityManager.getAllMembers()) {
-            currentParticipants.add(new SurveyParticipant(user));
-        }
-
         if (delayMinutes > 0) {
             startCountdown(delayMinutes);
         } else {
@@ -57,15 +58,18 @@ public class SurveyManager {
         isPendingPhase = true;
 
         ScheduledFuture<?> task = scheduler.scheduleAtFixedRate(() -> {
-            secondsRemaining--;
-            notifyCountdownTick(secondsRemaining, isPendingPhase);
-
-            if (secondsRemaining <= 0) {
-                ScheduledFuture<?> t = countdownTask.get();
-                if (t != null) {
-                    t.cancel(false);
+            try {
+                secondsRemaining--;
+                notifyCountdownTick(secondsRemaining, true);
+                if (secondsRemaining <= 0) {
+                    ScheduledFuture<?> t = countdownTask.get();
+                    if (t != null) {
+                        t.cancel(false);
+                    }
+                    startSurvey();
                 }
-                startSurvey();
+            } catch (RuntimeException e) {
+                LOG.log(Level.SEVERE, "טיק ספירה לאחור נכשל", e);
             }
         }, 1, 1, TimeUnit.SECONDS);
 
@@ -73,6 +77,13 @@ public class SurveyManager {
     }
 
     private synchronized void startSurvey() {
+        if (currentSurvey == null || currentSurvey.getStatus() != SurveyStatus.PENDING) {
+            return;
+        }
+        // M-02: המשתתפים = חברי הקהילה ברגע שהסקר יוצא בפועל (דרישה 5)
+        for (CommunityUser user : communityManager.getAllMembers()) {
+            currentParticipants.add(new SurveyParticipant(user));
+        }
         currentSurvey.setStatus(SurveyStatus.ACTIVE);
         currentSurvey.setStartTime(LocalDateTime.now());
 
@@ -82,38 +93,45 @@ public class SurveyManager {
 
         notifyListenersOnSurveyStarted();
 
-        ScheduledFuture<?> task = scheduler.scheduleAtFixedRate(() -> {
-            secondsRemaining--;
-            notifyCountdownTick(secondsRemaining, false);
-
-            if (secondsRemaining <= 0) {
-                closeSurvey();
+        // C-01: טיק לתצוגה בלבד — לא אחראי על סגירת הסקר, ועטוף ב-try/catch
+        countdownTask.set(scheduler.scheduleAtFixedRate(() -> {
+            try {
+                secondsRemaining = Math.max(0, secondsRemaining - 1);
+                notifyCountdownTick(secondsRemaining, false);
+            } catch (RuntimeException e) {
+                LOG.log(Level.SEVERE, "טיק ספירה לאחור נכשל", e);
             }
-        }, 1, 1, TimeUnit.SECONDS);
+        }, 1, 1, TimeUnit.SECONDS));
 
-        countdownTask.set(task);
-
-        ScheduledFuture<?> reminderTaskRef = scheduler.schedule(
-                this::sendRemindersIfNeeded, REMINDER_DELAY_SECONDS, TimeUnit.SECONDS);
-
-        reminderTask.set(reminderTaskRef);
+        // C-01: סגירה קשיחה אחרי 5 דקות — לא תלויה בטיקים ולא במאזינים
+        timeoutTask.set(scheduler.schedule(this::closeSurvey, SURVEY_DURATION_SECONDS, TimeUnit.SECONDS));
+        reminderTask.set(scheduler.schedule(this::sendRemindersIfNeeded, REMINDER_DELAY_SECONDS, TimeUnit.SECONDS));
     }
 
     private void notifyListenersOnSurveyStarted() {
-        for (SurveyListener listener : surveyListeners) {
-            listener.onSurveyStarted(currentSurvey, new ArrayList<>(currentParticipants));
-        }
+        Survey survey = currentSurvey;
+        List<SurveyParticipant> snapshot = new ArrayList<>(currentParticipants);
+        fire(l -> l.onSurveyStarted(survey, snapshot));
     }
 
     private void notifyCountdownTick(int secondsLeft, boolean isPending) {
+        fire(l -> l.onCountdownTick(secondsLeft, isPending));
+    }
+
+    /** C-01: מאזין שזורק חריגה לא מפיל את שאר המאזינים ולא את הטיימר. */
+    private void fire(Consumer<SurveyListener> event) {
         for (SurveyListener listener : surveyListeners) {
-            listener.onCountdownTick(secondsLeft, isPending);
+            try {
+                event.accept(listener);
+            } catch (RuntimeException e) {
+                LOG.log(Level.WARNING, "מאזין סקר נכשל: " + listener.getClass().getName(), e);
+            }
         }
     }
 
     public enum AnswerResult { RECORDED, SURVEY_NOT_ACTIVE, ALREADY_ANSWERED, UNKNOWN_PARTICIPANT }
     public synchronized AnswerResult recordAnswer(long telegramId, String questionId, String answer) {
-        if (!isSurveyInProgress()) {
+        if (currentSurvey == null || currentSurvey.getStatus() != SurveyStatus.ACTIVE) {
             return AnswerResult.SURVEY_NOT_ACTIVE;
         }
         SurveyParticipant participant = findParticipant(telegramId);
@@ -158,9 +176,9 @@ public class SurveyManager {
 
         currentSurvey.setStatus(SurveyStatus.COMPLETED);
 
-        for (SurveyListener listener : surveyListeners) {
-            listener.onSurveyClosed(currentSurvey, new ArrayList<>(currentParticipants));
-        }
+        Survey closed = currentSurvey;
+        List<SurveyParticipant> snapshot = new ArrayList<>(currentParticipants);
+        fire(l -> l.onSurveyClosed(closed, snapshot));
 
         currentSurvey = null;
         currentParticipants = null;
@@ -178,12 +196,10 @@ public class SurveyManager {
                 notCompleted.add(p);
             }
         }
-        for (SurveyListener listener : surveyListeners) {
-            listener.onReminderSent(notCompleted);
-        }
+        fire(l -> l.onReminderSent(notCompleted));
     }
 
-    public boolean isSurveyInProgress() {
+    public synchronized boolean isSurveyInProgress() {
         return currentSurvey != null &&
                 (currentSurvey.getStatus() == SurveyStatus.PENDING ||
                         currentSurvey.getStatus() == SurveyStatus.ACTIVE);
@@ -208,9 +224,7 @@ public class SurveyManager {
     }
 
     private void notifyListenersAnswerRecorded(SurveyParticipant participant) {
-        for (SurveyListener listener : surveyListeners) {
-            listener.onAnswerRecorded(participant);
-        }
+        fire(l -> l.onAnswerRecorded(participant));
     }
 
     public void addSurveyListener(SurveyListener listener) {
@@ -221,11 +235,11 @@ public class SurveyManager {
         surveyListeners.remove(listener);
     }
 
-    public Survey getCurrentSurvey() {
+    public synchronized Survey getCurrentSurvey() {
         return currentSurvey;
     }
 
-    public List<SurveyParticipant> getCurrentParticipants() {
+    public synchronized List<SurveyParticipant> getCurrentParticipants() {
         return currentParticipants != null ? new ArrayList<>(currentParticipants) : new ArrayList<>();
     }
 

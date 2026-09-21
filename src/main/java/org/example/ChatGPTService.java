@@ -15,7 +15,7 @@ import java.util.List;
 
 public class ChatGPTService {
 
-    private static final String API_ENDPOINT = "https://shaitest-production-3066.up.railway.app/api-request";
+    private static final String API_ENDPOINT = "OPENAI_API_KEY";
     private static final String TOKEN = System.getenv("SURVEY_API_TOKEN");
     private final OkHttpClient client;
 
@@ -28,6 +28,9 @@ public class ChatGPTService {
     }
 
     public List<Question> generateSurvey(String topic) throws Exception {
+        if (TOKEN == null || TOKEN.isBlank()) {
+            throw new IllegalStateException("חסר משתנה הסביבה SURVEY_API_TOKEN — לא ניתן ליצור שאלות אוטומטית.");
+        }
         String prompt = "Create a survey with 1-3 questions about: " + topic +
                 "\nFor each question, provide 2-4 answer options.\n" +
                 "Return ONLY valid JSON with this format:\n" +
@@ -43,11 +46,10 @@ public class ChatGPTService {
                 .build();
 
         try (Response response = client.newCall(req).execute()) {
+            String responseBody = response.body() == null ? "" : response.body().string();
             if (!response.isSuccessful()) {
-                throw new RuntimeException("API Error: " + response.code());
+                throw new RuntimeException("שירות יצירת השאלות החזיר שגיאה " + response.code() + ". " + snippet(responseBody));
             }
-
-            String responseBody = response.body().string();
             return parseQuestions(responseBody);
         }
     }
@@ -62,19 +64,27 @@ public class ChatGPTService {
             json = parseJsonObject(value);
         }
 
+        if (!json.has("questions")) {
+            throw new RuntimeException("התשובה מהשירות אינה מכילה שאלות. התקבל: " + snippet(responseBody));
+        }
         JSONArray questionsArray = json.getJSONArray("questions");
 
-        for (int i = 0; i < questionsArray.length(); i++) {
-            JSONObject q = questionsArray.getJSONObject(i);
-            String text = q.getString("text");
-
-            List<String> options = new ArrayList<>();
-            JSONArray optionsArray = q.getJSONArray("options");
-            for (int j = 0; j < optionsArray.length(); j++) {
-                options.add(optionsArray.getString(j));
+        for (int i = 0; i < questionsArray.length() && questions.size() < Survey.MAX_QUESTIONS; i++) {
+            try {
+                JSONObject q = questionsArray.getJSONObject(i);
+                String text = q.getString("text");
+                List<String> options = new ArrayList<>();
+                JSONArray optionsArray = q.getJSONArray("options");
+                for (int j = 0; j < optionsArray.length(); j++) {
+                    options.add(optionsArray.getString(j));
+                }
+                questions.add(new Question(text, options));
+            } catch (RuntimeException e) {
+                // C-07: שאלה פגומה מדולגת ולא מפילה את השאלות התקינות
             }
-
-            questions.add(new Question(text, options));
+        }
+        if (questions.isEmpty()) {
+            throw new RuntimeException("לא התקבלה אף שאלה תקינה מהשירות.");
         }
 
         return questions;
@@ -121,5 +131,11 @@ public class ChatGPTService {
             return "(תגובה ריקה)";
         }
         return text.length() > 200 ? text.substring(0, 200) + "..." : text;
+    }
+
+    /** C-07: סגירת ה-HTTP client ביציאה */
+    public void shutdown() {
+        client.dispatcher().executorService().shutdown();
+        client.connectionPool().evictAll();
     }
 }

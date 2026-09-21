@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class Survey {
     public static final int MIN_QUESTIONS = 1;
@@ -11,8 +12,10 @@ public class Survey {
 
     private final List<Question> questions;
     private final int delayMinutes;
-    private SurveyStatus status;
-    private LocalDateTime startTime;
+    /** C-02: מזהה קצר לסקר — נכנס ב-callback של הכפתורים בטלגרם */
+    private final String id = String.format("%08x", ThreadLocalRandom.current().nextInt());
+    private volatile SurveyStatus status;
+    private volatile LocalDateTime startTime;
 
     public Survey(List<Question> questions, int delayMinutes) {
         if (questions == null || questions.size() < MIN_QUESTIONS || questions.size() > MAX_QUESTIONS) {
@@ -25,6 +28,11 @@ public class Survey {
         this.delayMinutes = delayMinutes;
         this.status = SurveyStatus.PENDING;
     }
+
+    public String getId() {
+        return id;
+    }
+
     public List<Question> getQuestions() {
         return Collections.unmodifiableList(questions);
     }

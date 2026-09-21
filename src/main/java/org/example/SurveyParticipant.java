@@ -1,13 +1,13 @@
 package org.example;
 import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
 public class SurveyParticipant
 {
     private final CommunityUser user;
-    private ParticipantStatus status;
-    private final Map<String, String> answersByQuestionId = new LinkedHashMap<>();
+    private volatile ParticipantStatus status;
+    private final Map<String, String> answersByQuestionId = new ConcurrentHashMap<>();
 
     public SurveyParticipant(CommunityUser user)
     {

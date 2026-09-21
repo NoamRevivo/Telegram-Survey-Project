@@ -15,7 +15,17 @@ public class ResultsPanel extends JPanel implements SurveyListener {
         setLayout(new BorderLayout());
         lockedLabel.setFont(lockedLabel.getFont().deriveFont(Font.PLAIN, 16f));
         add(lockedLabel, BorderLayout.CENTER);
-        setLayout(new BorderLayout());
+    }
+
+    /** M-05: סקר חדש התחיל — מנקים את תוצאות הסקר הקודם */
+    @Override
+    public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
+        SwingUtilities.invokeLater(() -> {
+            removeAll();
+            add(lockedLabel, BorderLayout.CENTER);
+            revalidate();
+            repaint();
+        });
     }
 
     @Override
@@ -44,10 +54,10 @@ public class ResultsPanel extends JPanel implements SurveyListener {
     private JPanel buildQuestionResultPanel(int questionNumber, Question question, java.util.List<SurveyParticipant> participants) {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(BorderFactory.createTitledBorder("שאלה " + questionNumber + ": " + question.getText()));
-
         Map<String, Integer> voteCounts = countVotes(question, participants);
         int totalAnswers = voteCounts.values().stream().mapToInt(Integer::intValue).sum();
+        panel.setBorder(BorderFactory.createTitledBorder("שאלה " + questionNumber + ": " + question.getText()
+                + "   (ענו " + totalAnswers + " מתוך " + participants.size() + " משתתפים)"));
 
         java.util.List<Map.Entry<String, Integer>> sortedByPopularity = new ArrayList<>(voteCounts.entrySet());
         sortedByPopularity.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));

@@ -13,13 +13,9 @@ public interface SurveyListener
     default void onAnswerRecorded(SurveyParticipant participant)
     {
     }
-    default void onReminderDue(List<SurveyParticipant> unfinishedParticipants)
-    {
-    }
     default void onSurveyClosed(Survey survey, List<SurveyParticipant> participants)
     {
     }
     default void onReminderSent(List<SurveyParticipant> notCompleted) {
-        // Default implementation - empty
     }
 }

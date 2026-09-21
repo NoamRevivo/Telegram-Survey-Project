@@ -2,6 +2,7 @@ package org.example;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.logging.Logger;
 
 public class MemberJoinToast extends JWindow {
 
@@ -10,6 +11,8 @@ public class MemberJoinToast extends JWindow {
     private static final int VISIBLE_MILLIS = 2200;
 
     private boolean opacitySupported = true;
+    /** L-04: כמה בועות מוצגות כרגע, כדי שבועה חדשה תופיע מעל הקודמת (EDT בלבד) */
+    private static int visibleCount = 0;
 
     public MemberJoinToast(Window owner, String message) {
         super(owner);
@@ -54,7 +57,8 @@ public class MemberJoinToast extends JWindow {
         }
         Rectangle ownerBounds = owner.getBounds();
         int targetX = ownerBounds.x + (ownerBounds.width - WIDTH) / 2;
-        int targetY = ownerBounds.y + ownerBounds.height - HEIGHT - 50;
+        int targetY = ownerBounds.y + ownerBounds.height - HEIGHT - 50 - visibleCount * (HEIGHT + 8);
+        visibleCount++;
         int startY = ownerBounds.y + ownerBounds.height;
 
         setLocation(targetX, startY);
@@ -86,6 +90,7 @@ public class MemberJoinToast extends JWindow {
 
     private void fadeOutAndClose() {
         if (!opacitySupported) {
+            visibleCount--;
             dispose();
             return;
         }
@@ -98,6 +103,7 @@ public class MemberJoinToast extends JWindow {
             trySetOpacity(opacity);
             if (opacity <= 0f) {
                 fadeTimer.stop();
+                visibleCount--;
                 dispose();
             }
         });
@@ -112,7 +118,7 @@ public class MemberJoinToast extends JWindow {
             setOpacity(value);
         } catch (IllegalComponentStateException | UnsupportedOperationException | IllegalArgumentException ex) {
             opacitySupported = false;
-            System.err.println("שקיפות חלון לא נתמכת בסביבה זו - הבועה תוצג ללא אפקט דהייה.");
+            Logger.getLogger(MemberJoinToast.class.getName()).fine("שקיפות חלון לא נתמכת — הבועה תוצג ללא דהייה");
         }
     }
 }

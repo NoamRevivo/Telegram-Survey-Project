@@ -58,9 +58,13 @@ public class CommunityPanel extends JPanel implements CommunityListener {
     }
 
     private void highlightNewRow() {
-        table.setRowSelectionInterval(0, 0);
+        Color defaultSelection = UIManager.getColor("Table.selectionBackground");
         table.setSelectionBackground(new Color(200, 255, 200));
-        Timer timer = new Timer(1500, e -> table.clearSelection());
+        table.setRowSelectionInterval(0, 0);
+        Timer timer = new Timer(1500, e -> {
+            table.clearSelection();
+            table.setSelectionBackground(defaultSelection);   // L-01: מחזירים את צבע הבחירה המקורי
+        });
         timer.setRepeats(false);
         timer.start();
     }
