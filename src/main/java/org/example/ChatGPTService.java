@@ -15,7 +15,7 @@ import java.util.List;
 
 public class ChatGPTService {
 
-    private static final String API_ENDPOINT = "OPENAI_API_KEY";
+    private static final String API_ENDPOINT = "https://shaitest-production-3066.up.railway.app/";
     private static final String TOKEN = System.getenv("SURVEY_API_TOKEN");
     private final OkHttpClient client;
 

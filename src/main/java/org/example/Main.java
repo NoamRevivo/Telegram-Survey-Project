@@ -58,11 +58,17 @@ public class Main
             showFatal("לא ניתן להתחבר לטלגרם: " + e.getMessage() + "\nבדוק את BOT_TOKEN ואת החיבור לרשת.");
             return;
         }
+
         SwingUtilities.invokeLater(() ->
         {
             MainFrame frame = new MainFrame(communityManager, surveyManager, chatGPTService);
             frame.setVisible(true);
+
+            // חברים פיקטיביים לבדיקה — למחוק לפני ההגשה
+            communityManager.addMember(-1L, "בדיקה ראשונה", "test_user_1");
+            communityManager.addMember(-2L, "בדיקה שנייה", "test_user_2");
         });
+
         Runtime.getRuntime().addShutdownHook(new Thread(() ->
         {
             if (session.isRunning()) {
@@ -73,6 +79,7 @@ public class Main
             chatGPTService.shutdown();
         }));
     }
+
     private static void showFatal(String message) {
         try {
             SwingUtilities.invokeAndWait(() ->
