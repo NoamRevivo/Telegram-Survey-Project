@@ -1,63 +1,53 @@
 package org.example;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
-public class CommunityManager
-{
-    private static final Logger LOG = Logger.getLogger(CommunityManager.class.getName());
+public class CommunityManager {
+
     private final Map<Long, CommunityUser> members = new ConcurrentHashMap<>();
-    private final List<CommunityListener> listeners = new CopyOnWriteArrayList<>();
+    private final Listeners<CommunityListener> listeners = new Listeners<>();
 
-    public void addListener(CommunityListener listener)
-    {
+    public void addListener(CommunityListener listener) {
         listeners.add(listener);
     }
-    public void removeListener(CommunityListener listener)
-    {
+
+    /** R5-M16: נקרא מ-MainFrame.dispose() — חלון שנסגר מפסיק לקבל אירועים. */
+    public void removeListener(CommunityListener listener) {
         listeners.remove(listener);
     }
 
-    public synchronized boolean addMember(long telegramId, String firstName, String username)
-    {
+    /** R5-M01: ההודעה למאזינים יוצאת מחוץ למנעול (copy-then-notify). */
+    public boolean addMember(long telegramId, String firstName, String username) {
         CommunityUser user = new CommunityUser(telegramId, firstName, username);
-        if (members.putIfAbsent(telegramId, user) != null)
-        {
+        CommunityUser existing = members.putIfAbsent(telegramId, user);
+        if (existing != null) {
             return false;
         }
-        notifyMemberAdded(user, members.size());
+        int size = members.size();
+        listeners.fire(l -> l.onMemberAdded(user, size));
         return true;
     }
 
-    private void notifyMemberAdded(CommunityUser user, int size)
-    {
-        for (CommunityListener listener : listeners)
-        {
-            try
-            {
-                listener.onMemberAdded(user, size);
-            }
-            catch (RuntimeException e)
-            {
-                LOG.log(Level.WARNING, "מאזין קהילה נכשל", e);
-            }
-        }
+    /**
+     * R5-M17: סדר הצטרפות יציב — ConcurrentHashMap.values() מחזיר סדר hash שרירותי,
+     * וכך אותה קהילה הוצגה בשני סדרים שונים בשתי לשוניות.
+     */
+    public List<CommunityUser> getAllMembers() {
+        List<CommunityUser> sorted = new ArrayList<>(members.values());
+        sorted.sort(Comparator.comparing(CommunityUser::getJoinedAt)
+                .thenComparingLong(CommunityUser::getTelegramId));
+        return List.copyOf(sorted);
     }
 
-    public List<CommunityUser> getAllMembers()
-    {
-        return List.copyOf(members.values());
-    }
-    public int getCommunitySize()
-    {
+    public int getCommunitySize() {
         return members.size();
     }
-    public CommunityUser getMember(long telegramId)
-    {
+
+    public CommunityUser getMember(long telegramId) {
         return members.get(telegramId);
     }
 }

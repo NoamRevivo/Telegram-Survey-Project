@@ -3,5 +3,6 @@ package org.example;
 public enum SurveyStatus {
     PENDING,
     ACTIVE,
-    COMPLETED
+    COMPLETED,
+    CANCELLED
 }

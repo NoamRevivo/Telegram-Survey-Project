@@ -1,268 +1,305 @@
 package org.example;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * מתאם הסקר: מחזיק את המצב ({@link SurveyState}), מתזמן דרך {@link SurveyScheduler}
+ * ומודיע למאזינים דרך {@link Listeners}.
+ * <p>
+ * R5-M01: כל הודעה למאזינים נשלחת <b>מחוץ</b> למנעול (copy-then-notify) —
+ * ה-EDT לעולם אינו מחכה למנעול שמוחזק בזמן שמריצים קוד זר.
+ */
 public class SurveyManager {
 
-    private static final Logger LOG = Logger.getLogger(SurveyManager.class.getName());
-
-    public static final int SURVEY_DURATION_SECONDS = 300;
-    private static final int REMINDER_DELAY_SECONDS = 180;
-    /** אזהרה אחרונה בטלגרם ב-30 השניות שלפני סגירת הסקר */
-    public static final int FINAL_WARNING_SECONDS_BEFORE_END = 30;
-    public static final int MIN_COMMUNITY_SIZE = 3;
+    public enum AnswerResult { RECORDED, SURVEY_NOT_ACTIVE, ALREADY_ANSWERED, UNKNOWN_PARTICIPANT }
 
     private final CommunityManager communityManager;
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
+    private final SurveyScheduler scheduler;
+    private final Listeners<SurveyListener> listeners = new Listeners<>();
 
-    private volatile Survey currentSurvey;
-    private volatile List<SurveyParticipant> currentParticipants;
-
-    private final AtomicReference<ScheduledFuture<?>> countdownTask = new AtomicReference<>();
-    private final AtomicReference<ScheduledFuture<?>> reminderTask = new AtomicReference<>();
-    private final AtomicReference<ScheduledFuture<?>> finalWarningTask = new AtomicReference<>();
-    private final AtomicReference<ScheduledFuture<?>> timeoutTask = new AtomicReference<>();
-
-    private final CopyOnWriteArrayList<SurveyListener> surveyListeners = new CopyOnWriteArrayList<>();
-    private volatile int secondsRemaining;
-    private volatile boolean reminderSent;
-    private volatile boolean finalWarningSent;
-    private volatile boolean isPendingPhase;
+    /* כל השדות הבאים מוגנים על ידי this */
+    private SurveyState state;
+    private SurveyScheduler.Cancellable countdownTask;
+    private SurveyScheduler.Cancellable reminderTask;
+    private SurveyScheduler.Cancellable finalWarningTask;
+    private SurveyScheduler.Cancellable timeoutTask;
+    private SurveyScheduler.Cancellable distributionWatchdog;
+    private int secondsRemaining;
+    private long generationCounter;
 
     public SurveyManager(CommunityManager communityManager) {
-        this.communityManager = communityManager;
+        this(communityManager, new DefaultSurveyScheduler());
     }
 
-    public synchronized void createSurvey(List<Question> questions, int delayMinutes) {
-        if (isSurveyInProgress()) {
-            throw new IllegalStateException("סקר פעיל כבר קיים. סיים אותו קודם.");
-        }
-        if (communityManager.getCommunitySize() < MIN_COMMUNITY_SIZE) {
-            throw new IllegalStateException("צריכים לפחות " + MIN_COMMUNITY_SIZE + " חברים בקהילה כדי להתחיל סקר.");
-        }
-        currentSurvey = new Survey(questions, delayMinutes);
-        currentParticipants = new CopyOnWriteArrayList<>();
+    /** R5-M12: הבנאי הזה מאפשר להזריק TestScheduler ולבדוק את כל הלוגיקה בלי להמתין. */
+    public SurveyManager(CommunityManager communityManager, SurveyScheduler scheduler) {
+        this.communityManager = communityManager;
+        this.scheduler = scheduler;
+    }
 
-        if (delayMinutes > 0) {
-            startCountdown(delayMinutes);
-        } else {
+    /* ===================== יצירה ===================== */
+
+    public void createSurvey(List<Question> questions, int delayMinutes) {
+        boolean startImmediately;
+        synchronized (this) {
+            if (inProgress()) {
+                throw new IllegalStateException("סקר פעיל כבר קיים. סיים אותו קודם.");
+            }
+            if (communityManager.getCommunitySize() < AppConfig.MIN_COMMUNITY_SIZE) {
+                throw new IllegalStateException(
+                        "צריכים לפחות " + AppConfig.MIN_COMMUNITY_SIZE + " חברים בקהילה כדי להתחיל סקר.");
+            }
+            Survey survey = new Survey(questions, delayMinutes);
+            state = new SurveyState(survey, ++generationCounter);
+            startImmediately = delayMinutes <= 0;
+            if (!startImmediately) {
+                startCountdown(delayMinutes);
+            }
+        }
+        if (startImmediately) {
             startSurvey();
         }
     }
 
+    /** נקרא תחת המנעול — רק מתזמן, לא מודיע. */
     private void startCountdown(int delayMinutes) {
-        currentSurvey.setStatus(SurveyStatus.PENDING);
+        state.status(SurveyStatus.PENDING);
         secondsRemaining = delayMinutes * 60;
-        isPendingPhase = true;
-
-        ScheduledFuture<?> task = scheduler.scheduleAtFixedRate(() -> {
-            try {
-                secondsRemaining--;
-                notifyCountdownTick(secondsRemaining, true);
-                if (secondsRemaining <= 0) {
-                    ScheduledFuture<?> t = countdownTask.get();
-                    if (t != null) {
-                        t.cancel(false);
-                    }
-                    startSurvey();
-                }
-            } catch (RuntimeException e) {
-                LOG.log(Level.SEVERE, "טיק ספירה לאחור נכשל", e);
-            }
-        }, 1, 1, TimeUnit.SECONDS);
-
-        countdownTask.set(task);
+        long generation = state.generation();
+        countdownTask = scheduler.scheduleTicks(() -> onPendingTick(generation), Duration.ofSeconds(1));
     }
 
-    private synchronized void startSurvey() {
-        if (currentSurvey == null || currentSurvey.getStatus() != SurveyStatus.PENDING) {
+    private void onPendingTick(long generation) {
+        int left;
+        String surveyId;
+        boolean reachedZero = false;
+        synchronized (this) {
+            if (state == null || state.generation() != generation || state.status() != SurveyStatus.PENDING) {
+                return;
+            }
+            secondsRemaining = Math.max(0, secondsRemaining - 1);
+            left = secondsRemaining;
+            surveyId = state.survey().getId();
+            if (left <= 0) {
+                cancel(countdownTask);
+                countdownTask = null;
+                reachedZero = true;
+            }
+        }
+        listeners.fire(l -> l.onCountdownTick(surveyId, left, true));
+        if (reachedZero) {
+            startSurvey();
+        }
+    }
+
+    private void startSurvey() {
+        Survey survey;
+        List<SurveyParticipant> snapshot;
+        synchronized (this) {
+            if (state == null || state.status() != SurveyStatus.PENDING) {
+                return;
+            }
+            // דרישה 5: המשתתפים הם חברי הקהילה ברגע שהסקר יוצא בפועל
+            state.seed(communityManager.getAllMembers());
+            state.status(SurveyStatus.ACTIVE);
+            state.survey().setStartTime(LocalDateTime.now());
+            secondsRemaining = AppConfig.SURVEY_DURATION_SECONDS;
+
+            // R5-M15: השעון מתחיל רק כשההפצה הסתיימה; הוואצ'דוג הוא רשת הביטחון
+            long generation = state.generation();
+            distributionWatchdog = scheduler.scheduleOnce(
+                    () -> startTimers(generation),
+                    Duration.ofSeconds(AppConfig.DISTRIBUTION_WATCHDOG_SECONDS));
+
+            survey = state.survey();
+            snapshot = state.snapshot();
+        }
+        listeners.fire(l -> l.onSurveyStarted(survey, snapshot));
+    }
+
+    /**
+     * R5-M15: הבוט מדווח שכל השאלות נשלחו — רק עכשיו מתחילות 5 הדקות.
+     * קריאה חוזרת אינה עושה דבר.
+     */
+    public void markDistributionComplete() {
+        long generation;
+        synchronized (this) {
+            if (state == null) {
+                return;
+            }
+            generation = state.generation();
+        }
+        startTimers(generation);
+    }
+
+    private synchronized void startTimers(long generation) {
+        if (state == null || state.generation() != generation || state.status() != SurveyStatus.ACTIVE) {
             return;
         }
-        // M-02: המשתתפים = חברי הקהילה ברגע שהסקר יוצא בפועל (דרישה 5)
-        for (CommunityUser user : communityManager.getAllMembers()) {
-            currentParticipants.add(new SurveyParticipant(user));
+        if (!state.markTimersStarted()) {
+            return;
         }
-        currentSurvey.setStatus(SurveyStatus.ACTIVE);
-        currentSurvey.setStartTime(LocalDateTime.now());
+        cancel(distributionWatchdog);
+        distributionWatchdog = null;
 
-        reminderSent = false;
-        finalWarningSent = false;
-        secondsRemaining = SURVEY_DURATION_SECONDS;
-        isPendingPhase = false;
+        secondsRemaining = AppConfig.SURVEY_DURATION_SECONDS;
+        countdownTask = scheduler.scheduleTicks(() -> onActiveTick(generation), Duration.ofSeconds(1));
+        reminderTask = scheduler.scheduleOnce(
+                () -> sendRemindersIfNeeded(generation, false),
+                Duration.ofSeconds(AppConfig.REMINDER_DELAY_SECONDS));
+        finalWarningTask = scheduler.scheduleOnce(
+                () -> sendRemindersIfNeeded(generation, true),
+                Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS
+                        - AppConfig.FINAL_WARNING_SECONDS_BEFORE_END));
+        // רשת הביטחון הקשיחה: אינה תלויה בטיקים ואינה תלויה במאזינים
+        timeoutTask = scheduler.scheduleOnce(
+                this::closeSurvey, Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS));
+    }
 
-        notifyListenersOnSurveyStarted();
-
-        // C-01: טיק לתצוגה בלבד — לא אחראי על סגירת הסקר, ועטוף ב-try/catch
-        countdownTask.set(scheduler.scheduleAtFixedRate(() -> {
-            try {
-                secondsRemaining = Math.max(0, secondsRemaining - 1);
-                notifyCountdownTick(secondsRemaining, false);
-            } catch (RuntimeException e) {
-                LOG.log(Level.SEVERE, "טיק ספירה לאחור נכשל", e);
+    private void onActiveTick(long generation) {
+        int left;
+        String surveyId;
+        synchronized (this) {
+            if (state == null || state.generation() != generation || state.status() != SurveyStatus.ACTIVE) {
+                return;   // R5-C01, שכבה 1: טיק של סקר שכבר נסגר — נזרק כאן
             }
-        }, 1, 1, TimeUnit.SECONDS));
-
-        // C-01: סגירה קשיחה אחרי 5 דקות — לא תלויה בטיקים ולא במאזינים
-        timeoutTask.set(scheduler.schedule(this::closeSurvey, SURVEY_DURATION_SECONDS, TimeUnit.SECONDS));
-        reminderTask.set(scheduler.schedule(
-                () -> sendRemindersIfNeeded(false), REMINDER_DELAY_SECONDS, TimeUnit.SECONDS));
-        finalWarningTask.set(scheduler.schedule(
-                () -> sendRemindersIfNeeded(true),
-                SURVEY_DURATION_SECONDS - FINAL_WARNING_SECONDS_BEFORE_END, TimeUnit.SECONDS));
+            secondsRemaining = Math.max(0, secondsRemaining - 1);
+            left = secondsRemaining;
+            surveyId = state.survey().getId();
+        }
+        listeners.fire(l -> l.onCountdownTick(surveyId, left, false));
     }
 
-    private void notifyListenersOnSurveyStarted() {
-        Survey survey = currentSurvey;
-        List<SurveyParticipant> snapshot = new ArrayList<>(currentParticipants);
-        fire(l -> l.onSurveyStarted(survey, snapshot));
-    }
+    /* ===================== תשובות ===================== */
 
-    private void notifyCountdownTick(int secondsLeft, boolean isPending) {
-        fire(l -> l.onCountdownTick(secondsLeft, isPending));
-    }
-
-    /** C-01: מאזין שזורק חריגה לא מפיל את שאר המאזינים ולא את הטיימר. */
-    private void fire(Consumer<SurveyListener> event) {
-        for (SurveyListener listener : surveyListeners) {
-            try {
-                event.accept(listener);
-            } catch (RuntimeException e) {
-                LOG.log(Level.WARNING, "מאזין סקר נכשל: " + listener.getClass().getName(), e);
+    public AnswerResult recordAnswer(long telegramId, String questionId, String answer) {
+        SurveyParticipant participant;
+        boolean everyoneFinished;
+        synchronized (this) {
+            if (state == null || state.status() != SurveyStatus.ACTIVE) {
+                return AnswerResult.SURVEY_NOT_ACTIVE;
             }
+            participant = state.find(telegramId);
+            if (participant == null) {
+                return AnswerResult.UNKNOWN_PARTICIPANT;
+            }
+            if (participant.hasAnswered(questionId)) {
+                return AnswerResult.ALREADY_ANSWERED;
+            }
+            participant.recordAnswer(questionId, answer, state.survey().getQuestions().size());
+            everyoneFinished = state.allCompleted();
         }
-    }
-
-    public enum AnswerResult { RECORDED, SURVEY_NOT_ACTIVE, ALREADY_ANSWERED, UNKNOWN_PARTICIPANT }
-    public synchronized AnswerResult recordAnswer(long telegramId, String questionId, String answer) {
-        if (currentSurvey == null || currentSurvey.getStatus() != SurveyStatus.ACTIVE) {
-            return AnswerResult.SURVEY_NOT_ACTIVE;
-        }
-        SurveyParticipant participant = findParticipant(telegramId);
-        if (participant == null) {
-            return AnswerResult.UNKNOWN_PARTICIPANT;
-        }
-        if (participant.hasAnswered(questionId)) {
-            return AnswerResult.ALREADY_ANSWERED;
-        }
-
-        participant.recordAnswer(questionId, answer, currentSurvey.getQuestions().size());
-        notifyListenersAnswerRecorded(participant);
-
-        if (allParticipantsCompleted()) {
+        SurveyParticipant recorded = participant;
+        listeners.fire(l -> l.onAnswerRecorded(recorded));
+        if (everyoneFinished) {
             closeSurvey();
         }
         return AnswerResult.RECORDED;
     }
 
-    public synchronized void closeSurvey() {
-        if (currentSurvey == null || currentSurvey.getStatus() == SurveyStatus.COMPLETED) {
-            return;
-        }
+    /* ===================== סגירה וביטול ===================== */
 
+    public void closeSurvey() {
+        Survey closed;
+        List<SurveyParticipant> snapshot;
+        synchronized (this) {
+            if (state == null || state.status() != SurveyStatus.ACTIVE) {
+                return;
+            }
+            cancelAllTasks();
+            state.status(SurveyStatus.COMPLETED);
+            closed = state.survey();
+            snapshot = state.snapshot();
+            state = null;
+        }
+        listeners.fire(l -> l.onSurveyClosed(closed, snapshot));
+    }
+
+    /** R5-M13: ביטול לפני השליחה — אין משתתפים, אין תוצאות ואין הודעת סיום. */
+    public void cancelPendingSurvey() {
+        Survey cancelled;
+        synchronized (this) {
+            if (state == null || state.status() != SurveyStatus.PENDING) {
+                return;
+            }
+            cancelAllTasks();
+            state.status(SurveyStatus.CANCELLED);
+            cancelled = state.survey();
+            state = null;
+        }
+        listeners.fire(l -> l.onSurveyCancelled(cancelled));
+    }
+
+    private void sendRemindersIfNeeded(long generation, boolean isFinalWarning) {
+        Survey survey;
+        List<SurveyParticipant> pending;
+        synchronized (this) {
+            if (state == null || state.generation() != generation || state.status() != SurveyStatus.ACTIVE) {
+                return;
+            }
+            if (!state.markRemindersSent(isFinalWarning)) {
+                return;
+            }
+            pending = state.notCompleted();
+            if (pending.isEmpty()) {
+                return;
+            }
+            survey = state.survey();
+        }
+        listeners.fire(l -> l.onReminderSent(survey, pending, isFinalWarning));
+    }
+
+    private void cancelAllTasks() {
         cancel(countdownTask);
         cancel(reminderTask);
         cancel(finalWarningTask);
         cancel(timeoutTask);
-
-        currentSurvey.setStatus(SurveyStatus.COMPLETED);
-
-        Survey closed = currentSurvey;
-        List<SurveyParticipant> snapshot = new ArrayList<>(currentParticipants);
-        fire(l -> l.onSurveyClosed(closed, snapshot));
-
-        currentSurvey = null;
-        currentParticipants = null;
+        cancel(distributionWatchdog);
+        countdownTask = null;
+        reminderTask = null;
+        finalWarningTask = null;
+        timeoutTask = null;
+        distributionWatchdog = null;
     }
 
-    private void cancel(AtomicReference<ScheduledFuture<?>> taskRef) {
-        ScheduledFuture<?> task = taskRef.getAndSet(null);
+    private void cancel(SurveyScheduler.Cancellable task) {
         if (task != null) {
-            task.cancel(false);
+            task.cancel();
         }
     }
 
-    /**
-     * שולח תזכורת למי שטרם השלים את הסקר.
-     * isFinalWarning מבדיל בין התזכורת בדקה ה-3 לאזהרה האחרונה שלפני הסגירה,
-     * וכל אחת מהן נשלחת לכל היותר פעם אחת בסקר.
-     */
-    private synchronized void sendRemindersIfNeeded(boolean isFinalWarning) {
-        if (!isSurveyInProgress() || currentSurvey.getStatus() != SurveyStatus.ACTIVE) {
-            return;
-        }
-        if (isFinalWarning ? finalWarningSent : reminderSent) {
-            return;
-        }
-        if (isFinalWarning) {
-            finalWarningSent = true;
-        } else {
-            reminderSent = true;
-        }
-
-        List<SurveyParticipant> notCompleted = new ArrayList<>();
-        for (SurveyParticipant p : currentParticipants) {
-            if (p.getStatus() != ParticipantStatus.COMPLETED) {
-                notCompleted.add(p);
-            }
-        }
-        if (notCompleted.isEmpty()) {
-            return;
-        }
-        Survey survey = currentSurvey;
-        fire(l -> l.onReminderSent(survey, notCompleted, isFinalWarning));
-    }
+    /* ===================== שאילתות ===================== */
 
     public synchronized boolean isSurveyInProgress() {
-        return currentSurvey != null &&
-                (currentSurvey.getStatus() == SurveyStatus.PENDING ||
-                        currentSurvey.getStatus() == SurveyStatus.ACTIVE);
+        return inProgress();
     }
 
-    private SurveyParticipant findParticipant(long telegramId) {
-        for (SurveyParticipant p : currentParticipants) {
-            if (p.getUser().getTelegramId() == telegramId) {
-                return p;
-            }
-        }
-        return null;
-    }
-
-    private boolean allParticipantsCompleted() {
-        for (SurveyParticipant p : currentParticipants) {
-            if (p.getStatus() != ParticipantStatus.COMPLETED) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private void notifyListenersAnswerRecorded(SurveyParticipant participant) {
-        fire(l -> l.onAnswerRecorded(participant));
-    }
-
-    public void addSurveyListener(SurveyListener listener) {
-        surveyListeners.add(listener);
-    }
-
-    public void removeSurveyListener(SurveyListener listener) {
-        surveyListeners.remove(listener);
+    private boolean inProgress() {
+        return state != null
+                && (state.status() == SurveyStatus.PENDING || state.status() == SurveyStatus.ACTIVE);
     }
 
     public synchronized Survey getCurrentSurvey() {
-        return currentSurvey;
+        return state == null ? null : state.survey();
     }
 
     public synchronized List<SurveyParticipant> getCurrentParticipants() {
-        return currentParticipants != null ? new ArrayList<>(currentParticipants) : new ArrayList<>();
+        return state == null ? new ArrayList<>() : state.snapshot();
+    }
+
+
+    public void addSurveyListener(SurveyListener listener) {
+        listeners.add(listener);
+    }
+
+    public void removeSurveyListener(SurveyListener listener) {
+        listeners.remove(listener);
     }
 
     public void shutdown() {
-        scheduler.shutdownNow();
+        scheduler.shutdown();
     }
 }

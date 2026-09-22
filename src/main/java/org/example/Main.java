@@ -80,6 +80,7 @@ public class Main
         try {
             SwingUtilities.invokeAndWait(() ->
                     JOptionPane.showMessageDialog(null, message, "שגיאה בהפעלה", JOptionPane.ERROR_MESSAGE));
+
         } catch (Exception e) {
             LOG.log(Level.SEVERE, message, e);
         }
