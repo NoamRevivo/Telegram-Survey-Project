@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -72,19 +74,29 @@ class CoreModelTest {
         assertEquals(1, manager.getCommunitySize());
     }
 
-    /** R5-M01: מאזין שזורק חריגה אינו מפיל את שאר המאזינים. */
+    /**
+     * R5-M01: מאזין שזורק חריגה אינו מפיל את שאר המאזינים.
+     * הלוגר מושתק לרגע — החריגה כאן מכוונת, ואין טעם להציף את פלט הבדיקות בעקבות מחסנית.
+     */
     @Test
     void failingListenerDoesNotStopTheOthers() {
-        Listeners<Runnable> listeners = new Listeners<>();
-        boolean[] secondWasCalled = {false};
+        Logger logger = Logger.getLogger(Listeners.class.getName());
+        Level originalLevel = logger.getLevel();
+        logger.setLevel(Level.OFF);
+        try {
+            Listeners<Runnable> listeners = new Listeners<>();
+            boolean[] secondWasCalled = {false};
 
-        listeners.add(() -> {
-            throw new IllegalStateException("מאזין שבור");
-        });
-        listeners.add(() -> secondWasCalled[0] = true);
+            listeners.add(() -> {
+                throw new IllegalStateException("מאזין שבור");
+            });
+            listeners.add(() -> secondWasCalled[0] = true);
 
-        listeners.fire(Runnable::run);
+            listeners.fire(Runnable::run);
 
-        assertTrue(secondWasCalled[0]);
+            assertTrue(secondWasCalled[0]);
+        } finally {
+            logger.setLevel(originalLevel);
+        }
     }
 }

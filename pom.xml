@@ -11,7 +11,9 @@
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
+        <!-- קוד המקור והפלט בעברית — UTF-8 מקצה לקצה -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <junit.version>5.10.2</junit.version>
     </properties>
 
@@ -52,11 +54,26 @@
 
     <build>
         <plugins>
+            <!-- הידור מפורש ב-UTF-8, כדי שהמחרוזות בעברית לא ייהרסו -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+
             <!-- R5-M12: הרצת הבדיקות כחלק מ-mvn test / mvn package -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
+                <configuration>
+                    <!-- פלט הבדיקות בעברית קריאה: ב-Java 21 הקונסולה נשלטת
+                         על ידי stdout/stderr.encoding ולא רק file.encoding -->
+                    <argLine>-Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8</argLine>
+                </configuration>
             </plugin>
 
             <!-- R5-M12: jar יחיד להרצה ולהגשה -->
