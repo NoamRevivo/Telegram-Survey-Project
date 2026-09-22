@@ -4,17 +4,34 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.logging.Logger;
 
-public class MemberJoinToast extends JWindow {
+/**
+ * בועת התראה מונפשת שאינה חוסמת את המשתמש.
+ * מחליפה את MemberJoinToast ומשמשת לכל ההתראות החיוביות במערכת:
+ * הצטרפות חבר, סיום יצירת שאלות ב-ChatGPT, והתחלת סקר.
+ */
+public class Toast extends JWindow {
 
-    private static final int WIDTH = 320;
-    private static final int HEIGHT = 56;
-    private static final int VISIBLE_MILLIS = 2200;
+    public enum Type {
+        SUCCESS(UiTheme.SUCCESS_GREEN),
+        INFO(UiTheme.BRAND_DARK_BLUE),
+        WARNING(UiTheme.WARNING_ORANGE);
+
+        private final Color background;
+
+        Type(Color background) {
+            this.background = background;
+        }
+    }
+
+    private static final int WIDTH = 400;
+    private static final int HEIGHT = 58;
+    private static final int VISIBLE_MILLIS = 2600;
 
     private boolean opacitySupported = true;
-    /** L-04: כמה בועות מוצגות כרגע, כדי שבועה חדשה תופיע מעל הקודמת (EDT בלבד) */
+    /** כמה בועות מוצגות כרגע, כדי שבועה חדשה תופיע מעל הקודמת (EDT בלבד) */
     private static int visibleCount = 0;
 
-    public MemberJoinToast(Window owner, String message) {
+    public Toast(Window owner, String message, Type type) {
         super(owner);
         setSize(WIDTH, HEIGHT);
         setAlwaysOnTop(true);
@@ -26,19 +43,20 @@ public class MemberJoinToast extends JWindow {
             transparentBg = false;
         }
 
+        final Color bubbleColor = type.background;
         JPanel bubble = new JPanel(new BorderLayout()) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(UiTheme.BRAND_DARK_BLUE);
+                g2.setColor(bubbleColor);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 24, 24);
                 g2.dispose();
             }
         };
         bubble.setOpaque(!transparentBg);
         if (!transparentBg) {
-            bubble.setBackground(UiTheme.BRAND_DARK_BLUE);
+            bubble.setBackground(bubbleColor);
         }
         bubble.setBorder(BorderFactory.createEmptyBorder(8, 18, 8, 18));
 
@@ -48,6 +66,15 @@ public class MemberJoinToast extends JWindow {
         bubble.add(label, BorderLayout.CENTER);
 
         setContentPane(bubble);
+        UiTheme.applyRtl(bubble);
+    }
+
+    /** דרך הקריאה המומלצת — מאתרת לבד את חלון האב ולא עושה דבר אם אין כזה. */
+    public static void show(Component source, String message, Type type) {
+        Window owner = SwingUtilities.getWindowAncestor(source);
+        if (owner != null) {
+            new Toast(owner, message, type).showAnimated();
+        }
     }
 
     public void showAnimated() {
@@ -118,7 +145,7 @@ public class MemberJoinToast extends JWindow {
             setOpacity(value);
         } catch (IllegalComponentStateException | UnsupportedOperationException | IllegalArgumentException ex) {
             opacitySupported = false;
-            Logger.getLogger(MemberJoinToast.class.getName()).fine("שקיפות חלון לא נתמכת — הבועה תוצג ללא דהייה");
+            Logger.getLogger(Toast.class.getName()).fine("שקיפות חלון לא נתמכת — הבועה תוצג ללא דהייה");
         }
     }
 }

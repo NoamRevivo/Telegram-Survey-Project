@@ -7,12 +7,20 @@ import java.util.List;
 
 public class MainFrame extends JFrame {
 
+    private static final int TAB_ACTIVE_SURVEY = 2;
+    private static final int TAB_RESULTS = 3;
+
     private final JLabel statusBar = new JLabel();
+    private final String botUsername;
     private int communitySize = 0;
     private boolean surveyActive = false;
 
-    public MainFrame(CommunityManager communityManager, SurveyManager surveyManager, ChatGPTService chatGPTService) {
+    public MainFrame(CommunityManager communityManager,
+                     SurveyManager surveyManager,
+                     ChatGPTService chatGPTService,
+                     String botUsername) {
         super("Telegram Survey Bot - לוח בקרה");
+        this.botUsername = botUsername;
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1050, 740);
         setMinimumSize(new Dimension(880, 640));
@@ -27,13 +35,13 @@ public class MainFrame extends JFrame {
         CommunityPanel communityPanel = new CommunityPanel();
         communityManager.addListener(communityPanel);
 
-        ActiveSurveyPanel activeSurveyPanel = new ActiveSurveyPanel();
+        ActiveSurveyPanel activeSurveyPanel = new ActiveSurveyPanel(surveyManager);
         ResultsPanel resultsPanel = new ResultsPanel();
         surveyManager.addSurveyListener(activeSurveyPanel);
         surveyManager.addSurveyListener(resultsPanel);
 
         SurveyCreationPanel creationPanel = new SurveyCreationPanel(
-                surveyManager, communityManager, chatGPTService, () -> tabs.setSelectedIndex(2));
+                surveyManager, communityManager, chatGPTService, () -> tabs.setSelectedIndex(TAB_ACTIVE_SURVEY));
         communityManager.addListener(creationPanel);
 
         communityManager.addListener((newUser, newSize) -> SwingUtilities.invokeLater(() -> {
@@ -46,9 +54,11 @@ public class MainFrame extends JFrame {
             public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
                 SwingUtilities.invokeLater(() -> {
                     surveyActive = true;
-                    tabs.setSelectedIndex(2);
-                    tabs.setIconAt(2, AppIcons.live(20));
-                    tabs.setTitleAt(2, "סקר פעיל (חי)");
+                    tabs.setSelectedIndex(TAB_ACTIVE_SURVEY);
+                    tabs.setIconAt(TAB_ACTIVE_SURVEY, AppIcons.live(20));
+                    tabs.setTitleAt(TAB_ACTIVE_SURVEY, "סקר פעיל (חי)");
+                    // התוצאות מתעדכנות כבר עכשיו — שהלשונית תרמוז על זה
+                    tabs.setTitleAt(TAB_RESULTS, "תוצאות (חי)");
                     refreshStatusBar();
                 });
             }
@@ -57,9 +67,10 @@ public class MainFrame extends JFrame {
             public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
                 SwingUtilities.invokeLater(() -> {
                     surveyActive = false;
-                    tabs.setSelectedIndex(3);
-                    tabs.setIconAt(2, AppIcons.active(20));
-                    tabs.setTitleAt(2, "סקר פעיל");
+                    tabs.setSelectedIndex(TAB_RESULTS);
+                    tabs.setIconAt(TAB_ACTIVE_SURVEY, AppIcons.active(20));
+                    tabs.setTitleAt(TAB_ACTIVE_SURVEY, "סקר פעיל");
+                    tabs.setTitleAt(TAB_RESULTS, "תוצאות");
                     refreshStatusBar();
                 });
             }
@@ -73,7 +84,7 @@ public class MainFrame extends JFrame {
         add(tabs, BorderLayout.CENTER);
         add(buildStatusBar(), BorderLayout.SOUTH);
         refreshStatusBar();
-        applyComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        UiTheme.applyRtl(getContentPane());
     }
 
     private JPanel buildHeader() {
@@ -87,6 +98,12 @@ public class MainFrame extends JFrame {
         title.setForeground(Color.WHITE);
         header.add(title, BorderLayout.WEST);
 
+        // זהות הבוט גלויה — חשוב במיוחד בהדגמה מול קהל
+        JLabel botLabel = new JLabel("@" + botUsername);
+        botLabel.setFont(botLabel.getFont().deriveFont(Font.PLAIN, 14f));
+        botLabel.setForeground(Color.WHITE);
+        header.add(botLabel, BorderLayout.EAST);
+
         return header;
     }
 
@@ -99,7 +116,8 @@ public class MainFrame extends JFrame {
 
     private void refreshStatusBar() {
         String surveyPart = surveyActive ? "📋 סקר פעיל כרגע" : "📋 אין סקר פעיל כרגע";
-        statusBar.setText("🟢 המערכת פעילה   |   👥 " + communitySize + " חברים בקהילה   |   " + surveyPart);
+        statusBar.setText("🟢 מחובר כ-@" + botUsername
+                + "   |   👥 " + communitySize + " חברים בקהילה   |   " + surveyPart);
     }
 
     private Image createAppIcon() {

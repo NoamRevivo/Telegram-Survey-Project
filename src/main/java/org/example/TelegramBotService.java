@@ -3,6 +3,7 @@ package org.example;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -81,11 +82,27 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
                 sendText(message.getChatId(), alreadyMemberMessage(from));
             }
         } else if (text.equalsIgnoreCase("/help")) {
-            sendText(message.getChatId(), "🤖 /start, \"היי\" או \"Hi\" — הצטרפות לקהילה.\n"
-                    + "כשנפתח סקר, השאלות יגיעו לכאן עם כפתורי תשובה. יש 5 דקות לענות.");
+            sendText(message.getChatId(), helpText());
         } else {
             sendText(message.getChatId(), "לא הבנתי 🙂 שלח/י /start כדי להצטרף לקהילה, או /help לעזרה.");
         }
+    }
+
+    /** טקסט העזרה נגזר מהקבועים במקום להיות מקודד קשיח */
+    private String helpText() {
+        return "🤖 /start, \"היי\" או \"Hi\" — הצטרפות לקהילה.\n"
+                + "כשנפתח סקר, השאלות יגיעו לכאן עם כפתורי תשובה.\n"
+                + "⏱ יש " + formatDuration(SurveyManager.SURVEY_DURATION_SECONDS) + " לענות על כל השאלות.\n"
+                + "🔔 תישלח תזכורת באמצע, ואזהרה אחרונה "
+                + SurveyManager.FINAL_WARNING_SECONDS_BEFORE_END + " שניות לפני הסגירה.";
+    }
+
+    private String formatDuration(int totalSeconds) {
+        int minutes = totalSeconds / 60;
+        if (minutes <= 0) {
+            return totalSeconds + " שניות";
+        }
+        return minutes == 1 ? "דקה אחת" : minutes + " דקות";
     }
 
     private String alreadyMemberMessage(User from) {
@@ -149,10 +166,35 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
         if (optionIndex < 0 || optionIndex >= question.getOptions().size()) {
             return "הכפתור לא תקין.";
         }
+        String chosenOption = question.getOptions().get(optionIndex);
         SurveyManager.AnswerResult result = surveyManager.recordAnswer(
-                callbackQuery.getFrom().getId(), question.getId(), question.getOptions().get(optionIndex));
+                callbackQuery.getFrom().getId(), question.getId(), chosenOption);
+
+        if (result == SurveyManager.AnswerResult.RECORDED) {
+            // מסמנים את הבחירה בהודעה עצמה ומסירים את הכפתורים, כדי שהמשתתף
+            // יראה במבט אחד על מה כבר ענה. ברקע, כדי שהמענה ל-callback יישאר מיידי.
+            int totalQuestions = survey.getQuestions().size();
+            notificationExecutor.submit(() ->
+                    markChosenAnswer(callbackQuery, question, chosenOption, questionIndex, totalQuestions));
+        }
+
         feedback.setShowAlert(result != SurveyManager.AnswerResult.RECORDED);
         return feedbackTextFor(result);
+    }
+
+    /** עריכת ההודעה המקורית — מציגה את התשובה שנבחרה ומסירה את המקלדת */
+    private void markChosenAnswer(CallbackQuery callbackQuery, Question question,
+                                  String chosenOption, int questionIndex, int totalQuestions) {
+        Message message = callbackQuery.getMessage();
+        if (message == null || message.getMessageId() == null) {
+            return;
+        }
+        EditMessageText edit = new EditMessageText();
+        edit.setChatId(String.valueOf(message.getChatId()));
+        edit.setMessageId(message.getMessageId());
+        edit.setText(questionHeader(questionIndex, totalQuestions) + question.getText()
+                + "\n\n✅ התשובה שלך: " + chosenOption);
+        safeExecute(edit);   // לא מגדירים ReplyMarkup — כך הכפתורים נעלמים
     }
 
     private String feedbackTextFor(SurveyManager.AnswerResult result) {
@@ -180,18 +222,35 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
             long chatId = participant.getUser().getTelegramId();
             // C-06: כל משתתף במשימה נפרדת — 4 במקביל במקום תור אחד ארוך
             notificationExecutor.submit(() -> {
+                sendSurveyIntro(chatId, questions.size());   // הודעת פתיחה לפני השאלות
+                sleepMillis(300);
                 for (int questionIndex = 0; questionIndex < questions.size(); questionIndex++) {
-                    sendQuestion(chatId, survey.getId(), questions.get(questionIndex), questionIndex);
+                    sendQuestion(chatId, survey.getId(), questions.get(questionIndex),
+                            questionIndex, questions.size());
                     sleepMillis(400);
                 }
             });
         }
     }
 
-    private void sendQuestion(long chatId, String surveyId, Question question, int questionIndex) {
+    /** המשתתף יודע מראש כמה שאלות יגיעו וכמה זמן יש לו */
+    private void sendSurveyIntro(long chatId, int questionCount) {
+        sendText(chatId, "📊 נפתח סקר חדש!\n"
+                + "❓ מספר שאלות: " + questionCount + "\n"
+                + "⏱ יש " + formatDuration(SurveyManager.SURVEY_DURATION_SECONDS) + " לענות.\n"
+                + "השאלות מגיעות עכשיו 👇");
+    }
+
+    private String questionHeader(int questionIndex, int totalQuestions) {
+        return "❓ שאלה " + (questionIndex + 1) + " מתוך " + totalQuestions + "\n\n";
+    }
+
+    private void sendQuestion(long chatId, String surveyId, Question question,
+                              int questionIndex, int totalQuestions) {
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
-        message.setText(question.getText());
+        // מספור השאלות, כדי שהתזכורת שמדברת על "שאלה 2" תהיה מובנת
+        message.setText(questionHeader(questionIndex, totalQuestions) + question.getText());
         message.setReplyMarkup(buildKeyboardFor(surveyId, question, questionIndex));
         safeExecute(message);
     }
@@ -213,10 +272,66 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
         return markup;
     }
 
-    public void sendReminders(List<SurveyParticipant> unfinishedParticipants) {
+    /**
+     * תזכורת אישית לכל משתתף שטרם סיים, הכוללת את מספרי השאלות
+     * שעדיין חסרות לו. הגרסה הסופית נשלחת ב-30 השניות האחרונות.
+     */
+    public void sendReminders(Survey survey, List<SurveyParticipant> unfinishedParticipants, boolean isFinalWarning) {
         for (SurveyParticipant participant : unfinishedParticipants) {
-            sendText(participant.getUser().getTelegramId(), "תזכורת: נא לענות על הסקר לפני שהזמן אוזל!");
+            sendText(participant.getUser().getTelegramId(),
+                    reminderTextFor(survey, participant, isFinalWarning));
         }
+    }
+
+    private String reminderTextFor(Survey survey, SurveyParticipant participant, boolean isFinalWarning) {
+        List<Integer> missing = unansweredQuestionNumbers(survey, participant);
+
+        StringBuilder text = new StringBuilder();
+        if (isFinalWarning) {
+            text.append("⏰ שימו לב! נותרו ")
+                    .append(SurveyManager.FINAL_WARNING_SECONDS_BEFORE_END)
+                    .append(" שניות אחרונות לסקר.\n\n");
+        } else {
+            text.append("🔔 תזכורת: הסקר ייסגר בקרוב.\n\n");
+        }
+
+        if (missing.isEmpty()) {
+            text.append("ענית על כל השאלות — תודה רבה! 🙏");
+            return text.toString();
+        }
+
+        if (missing.size() == 1) {
+            text.append("נותרה לך שאלה ").append(missing.get(0)).append(" שטרם ענית עליה.");
+        } else {
+            text.append("טרם ענית על ").append(missing.size()).append(" שאלות: ")
+                    .append(formatQuestionNumbers(missing)).append('.');
+        }
+        text.append("\n👆 גלול/י למעלה אל השאלה ולחץ/י על אחת מאפשרויות התשובה.");
+        return text.toString();
+    }
+
+    /** מחזיר את מספרי השאלות (מבוסס 1) שהמשתתף טרם ענה עליהן */
+    private List<Integer> unansweredQuestionNumbers(Survey survey, SurveyParticipant participant) {
+        List<Integer> missing = new ArrayList<>();
+        List<Question> questions = survey.getQuestions();
+        for (int i = 0; i < questions.size(); i++) {
+            if (!participant.hasAnswered(questions.get(i).getId())) {
+                missing.add(i + 1);
+            }
+        }
+        return missing;
+    }
+
+    /** "1, 2 ו-3" — קריא יותר מרשימה מופרדת בפסיקים בלבד */
+    private String formatQuestionNumbers(List<Integer> numbers) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < numbers.size(); i++) {
+            if (i > 0) {
+                sb.append(i == numbers.size() - 1 ? " ו-" : ", ");
+            }
+            sb.append(numbers.get(i));
+        }
+        return sb.toString();
     }
 
     private void sendText(long chatId, String text) {
@@ -271,8 +386,8 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
     }
 
     @Override
-    public void onReminderSent(List<SurveyParticipant> notCompleted) {
-        priorityExecutor.submit(() -> sendReminders(notCompleted));
+    public void onReminderSent(Survey survey, List<SurveyParticipant> notCompleted, boolean isFinalWarning) {
+        priorityExecutor.submit(() -> sendReminders(survey, notCompleted, isFinalWarning));
     }
 
     /** M-11: הודעת סיום לכל המשתתפים */

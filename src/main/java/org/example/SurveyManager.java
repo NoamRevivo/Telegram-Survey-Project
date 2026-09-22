@@ -12,8 +12,10 @@ public class SurveyManager {
 
     private static final Logger LOG = Logger.getLogger(SurveyManager.class.getName());
 
-    private static final int SURVEY_DURATION_SECONDS = 300;
+    public static final int SURVEY_DURATION_SECONDS = 300;
     private static final int REMINDER_DELAY_SECONDS = 180;
+    /** אזהרה אחרונה בטלגרם ב-30 השניות שלפני סגירת הסקר */
+    public static final int FINAL_WARNING_SECONDS_BEFORE_END = 30;
     public static final int MIN_COMMUNITY_SIZE = 3;
 
     private final CommunityManager communityManager;
@@ -24,11 +26,13 @@ public class SurveyManager {
 
     private final AtomicReference<ScheduledFuture<?>> countdownTask = new AtomicReference<>();
     private final AtomicReference<ScheduledFuture<?>> reminderTask = new AtomicReference<>();
+    private final AtomicReference<ScheduledFuture<?>> finalWarningTask = new AtomicReference<>();
     private final AtomicReference<ScheduledFuture<?>> timeoutTask = new AtomicReference<>();
 
     private final CopyOnWriteArrayList<SurveyListener> surveyListeners = new CopyOnWriteArrayList<>();
     private volatile int secondsRemaining;
     private volatile boolean reminderSent;
+    private volatile boolean finalWarningSent;
     private volatile boolean isPendingPhase;
 
     public SurveyManager(CommunityManager communityManager) {
@@ -88,6 +92,7 @@ public class SurveyManager {
         currentSurvey.setStartTime(LocalDateTime.now());
 
         reminderSent = false;
+        finalWarningSent = false;
         secondsRemaining = SURVEY_DURATION_SECONDS;
         isPendingPhase = false;
 
@@ -105,7 +110,11 @@ public class SurveyManager {
 
         // C-01: סגירה קשיחה אחרי 5 דקות — לא תלויה בטיקים ולא במאזינים
         timeoutTask.set(scheduler.schedule(this::closeSurvey, SURVEY_DURATION_SECONDS, TimeUnit.SECONDS));
-        reminderTask.set(scheduler.schedule(this::sendRemindersIfNeeded, REMINDER_DELAY_SECONDS, TimeUnit.SECONDS));
+        reminderTask.set(scheduler.schedule(
+                () -> sendRemindersIfNeeded(false), REMINDER_DELAY_SECONDS, TimeUnit.SECONDS));
+        finalWarningTask.set(scheduler.schedule(
+                () -> sendRemindersIfNeeded(true),
+                SURVEY_DURATION_SECONDS - FINAL_WARNING_SECONDS_BEFORE_END, TimeUnit.SECONDS));
     }
 
     private void notifyListenersOnSurveyStarted() {
@@ -156,23 +165,10 @@ public class SurveyManager {
             return;
         }
 
-        ScheduledFuture<?> countdownRef = countdownTask.get();
-        if (countdownRef != null) {
-            countdownRef.cancel(false);
-            countdownTask.set(null);
-        }
-
-        ScheduledFuture<?> reminderRef = reminderTask.get();
-        if (reminderRef != null) {
-            reminderRef.cancel(false);
-            reminderTask.set(null);
-        }
-
-        ScheduledFuture<?> timeoutRef = timeoutTask.get();
-        if (timeoutRef != null) {
-            timeoutRef.cancel(false);
-            timeoutTask.set(null);
-        }
+        cancel(countdownTask);
+        cancel(reminderTask);
+        cancel(finalWarningTask);
+        cancel(timeoutTask);
 
         currentSurvey.setStatus(SurveyStatus.COMPLETED);
 
@@ -184,11 +180,30 @@ public class SurveyManager {
         currentParticipants = null;
     }
 
-    private synchronized void sendRemindersIfNeeded() {
-        if (reminderSent || !isSurveyInProgress()) {
+    private void cancel(AtomicReference<ScheduledFuture<?>> taskRef) {
+        ScheduledFuture<?> task = taskRef.getAndSet(null);
+        if (task != null) {
+            task.cancel(false);
+        }
+    }
+
+    /**
+     * שולח תזכורת למי שטרם השלים את הסקר.
+     * isFinalWarning מבדיל בין התזכורת בדקה ה-3 לאזהרה האחרונה שלפני הסגירה,
+     * וכל אחת מהן נשלחת לכל היותר פעם אחת בסקר.
+     */
+    private synchronized void sendRemindersIfNeeded(boolean isFinalWarning) {
+        if (!isSurveyInProgress() || currentSurvey.getStatus() != SurveyStatus.ACTIVE) {
             return;
         }
-        reminderSent = true;
+        if (isFinalWarning ? finalWarningSent : reminderSent) {
+            return;
+        }
+        if (isFinalWarning) {
+            finalWarningSent = true;
+        } else {
+            reminderSent = true;
+        }
 
         List<SurveyParticipant> notCompleted = new ArrayList<>();
         for (SurveyParticipant p : currentParticipants) {
@@ -196,7 +211,11 @@ public class SurveyManager {
                 notCompleted.add(p);
             }
         }
-        fire(l -> l.onReminderSent(notCompleted));
+        if (notCompleted.isEmpty()) {
+            return;
+        }
+        Survey survey = currentSurvey;
+        fire(l -> l.onReminderSent(survey, notCompleted, isFinalWarning));
     }
 
     public synchronized boolean isSurveyInProgress() {

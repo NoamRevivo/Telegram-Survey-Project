@@ -65,12 +65,28 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
         chatGptRadio.addActionListener(e -> onQuestionsChanged());
         generateButton.addActionListener(e -> onGenerateWithChatGpt());
         addQuestionButton.addActionListener(e -> onAddQuestionManually());
+        // Enter בשדה הנושא מפעיל יצירה — בלי להוריד יד מהמקלדת
+        topicField.addActionListener(e -> {
+            if (generateButton.isEnabled()) {
+                onGenerateWithChatGpt();
+            }
+        });
+
+        // הסברים קצרים על כל פקד
+        manualRadio.setToolTipText("הזנת השאלות והתשובות בעצמך");
+        chatGptRadio.setToolTipText("ChatGPT יציע שאלות לפי הנושא שתזין");
+        topicField.setToolTipText("נושא הסקר, לדוגמה: \"טיול שנתי\" — ואז Enter");
+        generateButton.setToolTipText("שולח את הנושא ל-ChatGPT ומקבל עד "
+                + Survey.MAX_QUESTIONS + " שאלות");
+        addQuestionButton.setToolTipText("הוספת שאלה חדשה עם " + Question.MIN_OPTIONS
+                + "-" + Question.MAX_OPTIONS + " אפשרויות תשובה");
 
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEADING, 10, 8));
         panel.setBorder(BorderFactory.createTitledBorder("שיטת יצירת השאלות"));
         panel.add(manualRadio);
         panel.add(chatGptRadio);
-        panel.add(new JLabel("   נושא:"));
+        panel.add(Box.createHorizontalStrut(14));
+        panel.add(new JLabel("נושא:"));
         panel.add(topicField);
         panel.add(generateButton);
         panel.add(addQuestionButton);
@@ -90,9 +106,11 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
 
         editQuestionButton.setEnabled(false);
         editQuestionButton.addActionListener(e -> onEditSelectedQuestion());
+        editQuestionButton.setToolTipText("עריכת השאלה המסומנת ברשימה");
 
         deleteQuestionButton.setEnabled(false);
         deleteQuestionButton.addActionListener(e -> onDeleteSelectedQuestion());
+        deleteQuestionButton.setToolTipText("מחיקת השאלה המסומנת ברשימה");
 
         questionsCountLabel.setFont(questionsCountLabel.getFont().deriveFont(Font.PLAIN, 12f));
 
@@ -111,6 +129,8 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
     private JPanel buildStartPanel() {
         startButton.setFont(startButton.getFont().deriveFont(Font.BOLD, 15f));
         startButton.addActionListener(e -> onStartSurvey());
+        startButton.setToolTipText("שולח את השאלות לכל חברי הקהילה ופותח את הסקר");
+        delayCombo.setToolTipText("כמה זמן לחכות לפני שהשאלות יישלחו בטלגרם");
 
         communityStatusLabel.setFont(communityStatusLabel.getFont().deriveFont(Font.PLAIN, 13f));
         communityStatusLabel.setHorizontalAlignment(SwingConstants.CENTER);
@@ -135,11 +155,11 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
         boolean atMax = questionsModel.size() >= Survey.MAX_QUESTIONS;
 
         topicField.setEnabled(isChatGpt);
-        generateButton.setEnabled(isChatGpt && !atMax);
+        generateButton.setEnabled(isChatGpt);
         addQuestionButton.setEnabled(!isChatGpt && !atMax);
 
         questionsCountLabel.setText(questionsModel.size() + " / " + Survey.MAX_QUESTIONS + " שאלות");
-        questionsCountLabel.setForeground(atMax ? UiTheme.WARNING_ORANGE : Color.GRAY);
+        questionsCountLabel.setForeground(atMax ? UiTheme.WARNING_ORANGE : UiTheme.MUTED_TEXT);
 
         updateQuestionButtonsState();
     }
@@ -196,12 +216,28 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
             questionsModel.addElement(question);
         }
     }
+
     private void onGenerateWithChatGpt() {
         String topic = topicField.getText().trim();
         if (topic.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "נא להזין נושא לסקר.");
+            JOptionPane.showMessageDialog(this, "נא להזין נושא לסקר.", "חסר נושא",
+                    JOptionPane.WARNING_MESSAGE);
+            topicField.requestFocusInWindow();
             return;
         }
+        // היצירה דורסת את הרשימה הקיימת — שואלים לפני שמוחקים עבודה של המשתמש
+        if (!questionsModel.isEmpty()) {
+            int answer = JOptionPane.showConfirmDialog(this,
+                    "יצירה באמצעות ChatGPT תחליף את " + questionsModel.size()
+                            + " השאלות שכבר ברשימה.\nלהמשיך?",
+                    "החלפת השאלות הקיימות",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+            if (answer != JOptionPane.YES_OPTION) {
+                return;
+            }
+        }
+
         generateButton.setEnabled(false);
         generateButton.setText("⏳ יוצר שאלות…");   // M-04: חיווי טעינה
         topicField.setEnabled(false);
@@ -222,7 +258,15 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
                         }
                         questionsModel.addElement(q);
                     }
+                    // הצלחה מוצגת כבועה שלא חוסמת את המשתמש
+                    Toast.show(SurveyCreationPanel.this,
+                            "✨ ChatGPT יצר " + questionsModel.size() + " שאלות בנושא " + quoted(topic),
+                            Toast.Type.SUCCESS);
+                    if (!questionsModel.isEmpty()) {
+                        questionsList.setSelectedIndex(0);
+                    }
                 } catch (Exception ex) {
+                    // כישלון נשאר חלונית חוסמת — אסור שתתפספס
                     Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
                     JOptionPane.showMessageDialog(SurveyCreationPanel.this,
                             "יצירת השאלות נכשלה: " + cause.getMessage(), "שגיאה", JOptionPane.ERROR_MESSAGE);
@@ -230,10 +274,18 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
                     generateButton.setText("✨ צור סקר");
                     setCursor(Cursor.getDefaultCursor());
                     onQuestionsChanged();
+                    topicField.setEnabled(chatGptRadio.isSelected());
                 }
             }
         }.execute();
     }
+
+    /** מקצר נושא ארוך כדי שהבועה תישאר בשורה אחת */
+    private String quoted(String topic) {
+        String trimmed = topic.length() > 40 ? topic.substring(0, 40) + "…" : topic;
+        return "\"" + trimmed + "\"";
+    }
+
     private void onStartSurvey() {
         if (questionsModel.isEmpty()) {
             JOptionPane.showMessageDialog(this,
@@ -243,6 +295,10 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
             return;
         }
         int delayMinutes = DELAY_MINUTES[delayCombo.getSelectedIndex()];
+        // אישור עם סיכום — פתיחת סקר היא פעולה שלא ניתן לבטל
+        if (!confirmStart(delayMinutes)) {
+            return;
+        }
         try {
             List<Question> questions = new ArrayList<>();
             for (int i = 0; i < questionsModel.size(); i++) {
@@ -251,10 +307,12 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
             surveyManager.createSurvey(questions, delayMinutes);
             onSurveyStartedCallback.run();
             questionsModel.clear();
-            JOptionPane.showMessageDialog(this,
-                    "הסקר התחיל בהצלחה!",
-                    "הצלחה",
-                    JOptionPane.INFORMATION_MESSAGE);
+            // הצלחה כבועה — הדיאלוג החוסם קטע בדיוק את המעבר ללשונית הסקר
+            Toast.show(this,
+                    delayMinutes == 0
+                            ? "🚀 הסקר נשלח לקהילה!"
+                            : "🚀 הסקר נקבע — יישלח בעוד " + delayCombo.getSelectedItem(),
+                    Toast.Type.SUCCESS);
         }
         catch (IllegalStateException | IllegalArgumentException e) {
             JOptionPane.showMessageDialog(this,
@@ -262,5 +320,19 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
                     "שגיאה",
                     JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private boolean confirmStart(int delayMinutes) {
+        String timing = delayMinutes == 0 ? "מיידית" : "בעוד " + delayCombo.getSelectedItem();
+        int durationMinutes = SurveyManager.SURVEY_DURATION_SECONDS / 60;
+        String message = "לפתוח את הסקר?\n\n"
+                + "❓ שאלות: " + questionsModel.size() + "\n"
+                + "👥 חברי קהילה שיקבלו את הסקר: " + communityManager.getCommunitySize() + "\n"
+                + "⏱ שליחה: " + timing + "\n"
+                + "🕔 זמן מענה: " + durationMinutes + " דקות\n\n"
+                + "לא ניתן לערוך את השאלות אחרי הפתיחה.";
+        int answer = JOptionPane.showConfirmDialog(this, message, "אישור פתיחת סקר",
+                JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        return answer == JOptionPane.YES_OPTION;
     }
 }

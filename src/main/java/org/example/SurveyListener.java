@@ -16,6 +16,7 @@ public interface SurveyListener
     default void onSurveyClosed(Survey survey, List<SurveyParticipant> participants)
     {
     }
-    default void onReminderSent(List<SurveyParticipant> notCompleted) {
+
+    default void onReminderSent(Survey survey, List<SurveyParticipant> notCompleted, boolean isFinalWarning) {
     }
 }

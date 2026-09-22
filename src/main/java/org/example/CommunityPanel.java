@@ -70,10 +70,7 @@ public class CommunityPanel extends JPanel implements CommunityListener {
     }
 
     private void showJoinToast(CommunityUser newUser) {
-        Window owner = SwingUtilities.getWindowAncestor(this);
-        if (owner != null) {
-            new MemberJoinToast(owner, "🎉 " + newUser.getFirstName() + " הצטרף/ה לקהילה!").showAnimated();
-        }
+        Toast.show(this, "🎉 " + newUser.getFirstName() + " הצטרף/ה לקהילה!", Toast.Type.INFO);
     }
 
     private static class StripedRowRenderer extends DefaultTableCellRenderer {
