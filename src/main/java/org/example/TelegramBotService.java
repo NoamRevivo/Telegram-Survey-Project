@@ -141,8 +141,15 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
                 surveyManager.recordAnswer(from.getId(), question.getId(), chosenOption);
 
         if (result == SurveyManager.AnswerResult.RECORDED) {
-            notifier.markChosenAnswer(callbackQuery.getMessage(), question, chosenOption,
-                    questionIndex, survey.getQuestions().size());
+            /*
+             * R5-M05: getMessage() מחזיר MaybeInaccessibleMessage — הודעה שטלגרם
+             * כבר אינו מאפשר לבוט לגשת לתוכנה. רק Message אמיתית ניתנת לעריכה,
+             * ורק ממנה אפשר לקחת את מזהה הצ'אט הנכון (ולא את זה של המשתמש).
+             */
+            if (callbackQuery.getMessage() instanceof Message message) {
+                notifier.markChosenAnswer(message.getChatId(), message.getMessageId(),
+                        question, chosenOption, questionIndex, survey.getQuestions().size());
+            }
         }
         feedback.setShowAlert(result != SurveyManager.AnswerResult.RECORDED);
         return MessageTemplates.answerFeedback(result);

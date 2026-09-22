@@ -2,7 +2,6 @@ package org.example;
 
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
-import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
@@ -127,17 +126,15 @@ public class BotNotifier implements CommunityListener, SurveyListener {
         });
     }
 
-
-
-    public void markChosenAnswer(Message message, Question question, String chosenOption,
-                                 int questionIndex, int totalQuestions) {
-        if (message == null || message.getMessageId() == null || message.getChatId() == null) {
+    public void markChosenAnswer(Long chatId, Integer messageId, Question question,
+                                 String chosenOption, int questionIndex, int totalQuestions) {
+        if (chatId == null || messageId == null) {
             return;
         }
-        gateway.runOnNotificationPool("סימון תשובה בהודעה " + message.getMessageId(), () -> {
+        gateway.runOnNotificationPool("סימון תשובה בהודעה " + messageId, () -> {
             EditMessageText edit = new EditMessageText();
-            edit.setChatId(message.getChatId().toString());
-            edit.setMessageId(message.getMessageId());
+            edit.setChatId(chatId.toString());
+            edit.setMessageId(messageId);
             edit.setText(MessageTemplates.answeredQuestion(
                     questionIndex, totalQuestions, question, chosenOption));
             gateway.send(edit);
