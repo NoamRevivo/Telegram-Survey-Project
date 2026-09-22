@@ -173,7 +173,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
     }
 
     @Override
-    public void onCountdownTick(int secondsRemaining, boolean isPendingPhase) {
+    public void onCountdownTick(String surveyId, int secondsRemaining, boolean isPendingPhase) {
         SwingUtilities.invokeLater(() -> {
             cards.show(cardHolder, CARD_LIVE);
             stopButton.setEnabled(true);

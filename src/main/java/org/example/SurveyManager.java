@@ -16,6 +16,11 @@ public class SurveyManager {
 
     public enum AnswerResult { RECORDED, SURVEY_NOT_ACTIVE, ALREADY_ANSWERED, UNKNOWN_PARTICIPANT }
 
+    /* ===== גשר זמני עד סוף חלק 3 — למחוק! ראה "ניקוי" בהמשך ===== */
+    public static final int SURVEY_DURATION_SECONDS = AppConfig.SURVEY_DURATION_SECONDS;
+    public static final int FINAL_WARNING_SECONDS_BEFORE_END = AppConfig.FINAL_WARNING_SECONDS_BEFORE_END;
+    public static final int MIN_COMMUNITY_SIZE = AppConfig.MIN_COMMUNITY_SIZE;
+
     private final CommunityManager communityManager;
     private final SurveyScheduler scheduler;
     private final Listeners<SurveyListener> listeners = new Listeners<>();

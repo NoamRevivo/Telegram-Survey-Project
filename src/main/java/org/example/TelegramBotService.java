@@ -379,6 +379,7 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
     @Override
     public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
         sendSurveyToParticipants(survey, participants);
+        surveyManager.markDistributionComplete();
     }
 
     @Override
@@ -386,7 +387,6 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
         priorityExecutor.submit(() -> sendReminders(survey, notCompleted, isFinalWarning));
     }
 
-    /** M-11: הודעת סיום לכל המשתתפים */
     @Override
     public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
         priorityExecutor.submit(() -> {
