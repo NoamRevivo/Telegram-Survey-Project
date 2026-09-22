@@ -139,11 +139,10 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
             LOG.log(Level.WARNING, "callback לא תקין: " + callbackQuery.getData(), e);
             feedback.setText("לא הצלחתי לקלוט את הלחיצה, נסה/י שוב.");
         } finally {
-            safeExecute(feedback);   // M-01: תמיד עונים, אחרת המשתמש רואה שעון טעינה
+            safeExecute(feedback);
         }
     }
 
-    /** C-02: פורמט ה-callback הוא surveyId:questionIndex:optionIndex */
     private String resolveAnswer(CallbackQuery callbackQuery, AnswerCallbackQuery feedback) {
         String[] parts = callbackQuery.getData().split(":", 3);
         if (parts.length != 3) {
@@ -171,8 +170,6 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
                 callbackQuery.getFrom().getId(), question.getId(), chosenOption);
 
         if (result == SurveyManager.AnswerResult.RECORDED) {
-            // מסמנים את הבחירה בהודעה עצמה ומסירים את הכפתורים, כדי שהמשתתף
-            // יראה במבט אחד על מה כבר ענה. ברקע, כדי שהמענה ל-callback יישאר מיידי.
             int totalQuestions = survey.getQuestions().size();
             notificationExecutor.submit(() ->
                     markChosenAnswer(callbackQuery, question, chosenOption, questionIndex, totalQuestions));
@@ -182,19 +179,18 @@ public class TelegramBotService extends TelegramLongPollingBot implements Commun
         return feedbackTextFor(result);
     }
 
-    /** עריכת ההודעה המקורית — מציגה את התשובה שנבחרה ומסירה את המקלדת */
-    private void markChosenAnswer(CallbackQuery callbackQuery, Question question,
+        private void markChosenAnswer(CallbackQuery callbackQuery, Question question,
                                   String chosenOption, int questionIndex, int totalQuestions) {
-        Message message = callbackQuery.getMessage();
+        var message = callbackQuery.getMessage();
         if (message == null || message.getMessageId() == null) {
             return;
         }
         EditMessageText edit = new EditMessageText();
-        edit.setChatId(String.valueOf(message.getChatId()));
+        edit.setChatId(String.valueOf(callbackQuery.getFrom().getId()));
         edit.setMessageId(message.getMessageId());
         edit.setText(questionHeader(questionIndex, totalQuestions) + question.getText()
                 + "\n\n✅ התשובה שלך: " + chosenOption);
-        safeExecute(edit);   // לא מגדירים ReplyMarkup — כך הכפתורים נעלמים
+        safeExecute(edit);
     }
 
     private String feedbackTextFor(SurveyManager.AnswerResult result) {

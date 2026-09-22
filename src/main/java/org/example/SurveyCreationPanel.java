@@ -31,6 +31,18 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
     private final JComboBox<String> delayCombo =
             new JComboBox<>(new String[]{"מיידי", "1 דקה", "2 דקות", "5 דקות", "10 דקות"});
 
+    /** מסך טעינה שתופס את מקום רשימת השאלות בזמן שChatGPT עובד */
+    private static final String CARD_LIST = "list";
+    private static final String CARD_LOADING = "loading";
+    private final CardLayout questionsCards = new CardLayout();
+    private final JPanel questionsCardHolder = new JPanel(questionsCards);
+    private final JLabel loadingTitleLabel = new JLabel(" ", SwingConstants.CENTER);
+    private final JLabel loadingElapsedLabel = new JLabel(" ", SwingConstants.CENTER);
+    private final JProgressBar loadingBar = new JProgressBar();
+    private Timer elapsedTimer;
+    private boolean generating;
+    private int lastCommunitySize;
+
     public SurveyCreationPanel(SurveyManager surveyManager,
                                CommunityManager communityManager,
                                ChatGPTService chatGPTService,
@@ -119,11 +131,88 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
         actionsRow.add(deleteQuestionButton);
         actionsRow.add(questionsCountLabel);
 
+        questionsCardHolder.add(new JScrollPane(questionsList), CARD_LIST);
+        questionsCardHolder.add(buildLoadingCard(), CARD_LOADING);
+        questionsCards.show(questionsCardHolder, CARD_LIST);
+
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.setBorder(BorderFactory.createTitledBorder("שאלות הסקר"));
-        wrapper.add(new JScrollPane(questionsList), BorderLayout.CENTER);
+        wrapper.add(questionsCardHolder, BorderLayout.CENTER);
         wrapper.add(actionsRow, BorderLayout.SOUTH);
         return wrapper;
+    }
+
+    /**
+     * חיווי טעינה שאי אפשר לפספס.
+     * שינוי הטקסט בכפתור לבדו נבלע — כאן כל אזור הרשימה מוחלף.
+     */
+    private JPanel buildLoadingCard() {
+        JLabel sparkle = new JLabel("✨", SwingConstants.CENTER);
+        sparkle.setFont(sparkle.getFont().deriveFont(Font.PLAIN, 40f));
+        sparkle.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        loadingTitleLabel.setFont(loadingTitleLabel.getFont().deriveFont(Font.BOLD, 17f));
+        loadingTitleLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
+        loadingTitleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        loadingBar.setIndeterminate(true);
+        loadingBar.setForeground(UiTheme.BRAND_BLUE);
+        loadingBar.setMaximumSize(new Dimension(320, 14));
+        loadingBar.setPreferredSize(new Dimension(320, 14));
+        loadingBar.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        loadingElapsedLabel.setFont(loadingElapsedLabel.getFont().deriveFont(Font.PLAIN, 13f));
+        loadingElapsedLabel.setForeground(UiTheme.MUTED_TEXT);
+        loadingElapsedLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JPanel column = new JPanel();
+        column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
+        column.add(Box.createVerticalGlue());
+        column.add(sparkle);
+        column.add(Box.createVerticalStrut(10));
+        column.add(loadingTitleLabel);
+        column.add(Box.createVerticalStrut(16));
+        column.add(loadingBar);
+        column.add(Box.createVerticalStrut(10));
+        column.add(loadingElapsedLabel);
+        column.add(Box.createVerticalGlue());
+
+        JPanel card = new JPanel(new BorderLayout());
+        card.add(column, BorderLayout.CENTER);
+        return card;
+    }
+
+    private void showLoadingCard(String topic) {
+        generating = true;
+        loadingTitleLabel.setText("ChatGPT מנסח שאלות בנושא " + quoted(topic));
+        loadingElapsedLabel.setText("שולח בקשה לשרת…");
+        loadingBar.setIndeterminate(true);
+        questionsCards.show(questionsCardHolder, CARD_LOADING);
+        UiTheme.applyRtl(questionsCardHolder);
+
+        long startedAt = System.currentTimeMillis();
+        stopElapsedTimer();
+        elapsedTimer = new Timer(1000, e -> {
+            int seconds = (int) ((System.currentTimeMillis() - startedAt) / 1000);
+            loadingElapsedLabel.setText(seconds < 12
+                    ? "חלפו " + seconds + " שניות…"
+                    : "חלפו " + seconds + " שניות — עוד רגע, השרת עדיין עונה…");
+        });
+        elapsedTimer.start();
+    }
+
+    private void hideLoadingCard() {
+        generating = false;
+        stopElapsedTimer();
+        loadingBar.setIndeterminate(false);   // עוצר את האנימציה כדי לא לבזבז מחזורי ציור
+        questionsCards.show(questionsCardHolder, CARD_LIST);
+    }
+
+    private void stopElapsedTimer() {
+        if (elapsedTimer != null) {
+            elapsedTimer.stop();
+            elapsedTimer = null;
+        }
     }
 
     private JPanel buildStartPanel() {
@@ -154,20 +243,29 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
         boolean isChatGpt = chatGptRadio.isSelected();
         boolean atMax = questionsModel.size() >= Survey.MAX_QUESTIONS;
 
-        topicField.setEnabled(isChatGpt);
-        generateButton.setEnabled(isChatGpt);
-        addQuestionButton.setEnabled(!isChatGpt && !atMax);
+        // בזמן יצירה כל הפקדים נעולים — אין טעם לערוך רשימה שעומדת להידרס
+        topicField.setEnabled(isChatGpt && !generating);
+        generateButton.setEnabled(isChatGpt && !generating);
+        addQuestionButton.setEnabled(!isChatGpt && !atMax && !generating);
 
-        questionsCountLabel.setText(questionsModel.size() + " / " + Survey.MAX_QUESTIONS + " שאלות");
-        questionsCountLabel.setForeground(atMax ? UiTheme.WARNING_ORANGE : UiTheme.MUTED_TEXT);
+        questionsCountLabel.setText(generating
+                ? "יוצר שאלות…"
+                : questionsModel.size() + " / " + Survey.MAX_QUESTIONS + " שאלות");
+        questionsCountLabel.setForeground(atMax && !generating ? UiTheme.WARNING_ORANGE : UiTheme.MUTED_TEXT);
 
         updateQuestionButtonsState();
+        refreshStartButton();
     }
 
     private void updateQuestionButtonsState() {
-        boolean hasSelection = questionsList.getSelectedIndex() >= 0;
+        boolean hasSelection = questionsList.getSelectedIndex() >= 0 && !generating;
         editQuestionButton.setEnabled(hasSelection);
         deleteQuestionButton.setEnabled(hasSelection);
+    }
+
+    private void refreshStartButton() {
+        startButton.setEnabled(!generating && lastCommunitySize >= SurveyManager.MIN_COMMUNITY_SIZE);
+        delayCombo.setEnabled(!generating);
     }
 
     private void onEditSelectedQuestion() {
@@ -196,8 +294,9 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
     }
 
     private void updateCommunityStatus(int communitySize) {
+        lastCommunitySize = communitySize;
         boolean canStart = communitySize >= SurveyManager.MIN_COMMUNITY_SIZE;
-        startButton.setEnabled(canStart);
+        refreshStartButton();
         if (canStart) {
             communityStatusLabel.setText("✅  ניתן להתחיל סקר — " + communitySize + " חברים בקהילה");
             communityStatusLabel.setForeground(UiTheme.SUCCESS_GREEN);
@@ -238,9 +337,9 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
             }
         }
 
-        generateButton.setEnabled(false);
-        generateButton.setText("⏳ יוצר שאלות…");   // M-04: חיווי טעינה
-        topicField.setEnabled(false);
+        generateButton.setText("⏳ יוצר שאלות…");
+        showLoadingCard(topic);   // החיווי הראשי — מיד עם הלחיצה
+        onQuestionsChanged();     // נועל את שאר הפקדים
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
         new SwingWorker<java.util.List<Question>, Void>() {
             @Override
@@ -273,8 +372,8 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
                 } finally {
                     generateButton.setText("✨ צור סקר");
                     setCursor(Cursor.getDefaultCursor());
+                    hideLoadingCard();
                     onQuestionsChanged();
-                    topicField.setEnabled(chatGptRadio.isSelected());
                 }
             }
         }.execute();
