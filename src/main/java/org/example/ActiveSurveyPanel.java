@@ -55,13 +55,8 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     private int totalQuestions;
     private List<SurveyParticipant> currentParticipants;
 
-    /**
-     * R5-C01: מזהה הסקר שכבר נסגר על המסך.
-     * טיק שהיה באוויר ברגע הסגירה מגיע ל-EDT אחרי onSurveyClosed — והוא נזרק כאן,
-     * במקום לדרוס את מסך הסיום ולהחזיר כפתור "סיים סקר" פעיל שלא עושה כלום.
-     */
+
     private String closedSurveyId;
-    /** האם השלב הנוכחי הוא המתנה לשליחה — קובע את נוסח כפתור העצירה (R5-M13) */
     private boolean pendingPhase;
 
     private int phaseMaxSeconds = 1;
@@ -133,7 +128,6 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         return card;
     }
 
-    /** R5-M13: ביטול לפני השליחה הוא פעולה אחרת מסגירת סקר פעיל — גם בנוסח וגם בקוד. */
     private void onStopSurvey() {
         boolean cancelBeforeSending = pendingPhase;
         String message = cancelBeforeSending
@@ -157,7 +151,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     public void onCountdownTick(String surveyId, int secondsRemaining, boolean isPendingPhase) {
         SwingUtilities.invokeLater(() -> {
             if (surveyId.equals(closedSurveyId)) {
-                return;   // R5-C01: טיק מאוחר של סקר שכבר נסגר
+                return;
             }
             pendingPhase = isPendingPhase;
             cards.show(cardHolder, CARD_LIVE);
@@ -272,7 +266,6 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         });
     }
 
-    /** R5-M13: סקר שבוטל לפני השליחה חוזר למסך "אין סקר פעיל", בלי מסך סיום מטעה. */
     @Override
     public void onSurveyCancelled(Survey survey) {
         SwingUtilities.invokeLater(() -> {

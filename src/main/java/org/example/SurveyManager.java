@@ -5,13 +5,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * מתאם הסקר: מחזיק את המצב ({@link SurveyState}), מתזמן דרך {@link SurveyScheduler}
- * ומודיע למאזינים דרך {@link Listeners}.
- * <p>
- * R5-M01: כל הודעה למאזינים נשלחת <b>מחוץ</b> למנעול (copy-then-notify) —
- * ה-EDT לעולם אינו מחכה למנעול שמוחזק בזמן שמריצים קוד זר.
- */
+
 public class SurveyManager {
 
     public enum AnswerResult { RECORDED, SURVEY_NOT_ACTIVE, ALREADY_ANSWERED, UNKNOWN_PARTICIPANT }
@@ -20,7 +14,6 @@ public class SurveyManager {
     private final SurveyScheduler scheduler;
     private final Listeners<SurveyListener> listeners = new Listeners<>();
 
-    /* כל השדות הבאים מוגנים על ידי this */
     private SurveyState state;
     private SurveyScheduler.Cancellable countdownTask;
     private SurveyScheduler.Cancellable reminderTask;
@@ -34,13 +27,11 @@ public class SurveyManager {
         this(communityManager, new DefaultSurveyScheduler());
     }
 
-    /** R5-M12: הבנאי הזה מאפשר להזריק TestScheduler ולבדוק את כל הלוגיקה בלי להמתין. */
     public SurveyManager(CommunityManager communityManager, SurveyScheduler scheduler) {
         this.communityManager = communityManager;
         this.scheduler = scheduler;
     }
 
-    /* ===================== יצירה ===================== */
 
     public void createSurvey(List<Question> questions, int delayMinutes) {
         boolean startImmediately;
@@ -64,7 +55,6 @@ public class SurveyManager {
         }
     }
 
-    /** נקרא תחת המנעול — רק מתזמן, לא מודיע. */
     private void startCountdown(int delayMinutes) {
         state.status(SurveyStatus.PENDING);
         secondsRemaining = delayMinutes * 60;
@@ -102,13 +92,11 @@ public class SurveyManager {
             if (state == null || state.status() != SurveyStatus.PENDING) {
                 return;
             }
-            // דרישה 5: המשתתפים הם חברי הקהילה ברגע שהסקר יוצא בפועל
             state.seed(communityManager.getAllMembers());
             state.status(SurveyStatus.ACTIVE);
             state.survey().setStartTime(LocalDateTime.now());
             secondsRemaining = AppConfig.SURVEY_DURATION_SECONDS;
 
-            // R5-M15: השעון מתחיל רק כשההפצה הסתיימה; הוואצ'דוג הוא רשת הביטחון
             long generation = state.generation();
             distributionWatchdog = scheduler.scheduleOnce(
                     () -> startTimers(generation),
@@ -120,10 +108,7 @@ public class SurveyManager {
         listeners.fire(l -> l.onSurveyStarted(survey, snapshot));
     }
 
-    /**
-     * R5-M15: הבוט מדווח שכל השאלות נשלחו — רק עכשיו מתחילות 5 הדקות.
-     * קריאה חוזרת אינה עושה דבר.
-     */
+
     public void markDistributionComplete() {
         long generation;
         synchronized (this) {
@@ -154,7 +139,6 @@ public class SurveyManager {
                 () -> sendRemindersIfNeeded(generation, true),
                 Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS
                         - AppConfig.FINAL_WARNING_SECONDS_BEFORE_END));
-        // רשת הביטחון הקשיחה: אינה תלויה בטיקים ואינה תלויה במאזינים
         timeoutTask = scheduler.scheduleOnce(
                 this::closeSurvey, Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS));
     }
@@ -164,7 +148,7 @@ public class SurveyManager {
         String surveyId;
         synchronized (this) {
             if (state == null || state.generation() != generation || state.status() != SurveyStatus.ACTIVE) {
-                return;   // R5-C01, שכבה 1: טיק של סקר שכבר נסגר — נזרק כאן
+                return;
             }
             secondsRemaining = Math.max(0, secondsRemaining - 1);
             left = secondsRemaining;
@@ -172,8 +156,6 @@ public class SurveyManager {
         }
         listeners.fire(l -> l.onCountdownTick(surveyId, left, false));
     }
-
-    /* ===================== תשובות ===================== */
 
     public AnswerResult recordAnswer(long telegramId, String questionId, String answer) {
         SurveyParticipant participant;
@@ -200,8 +182,6 @@ public class SurveyManager {
         return AnswerResult.RECORDED;
     }
 
-    /* ===================== סגירה וביטול ===================== */
-
     public void closeSurvey() {
         Survey closed;
         List<SurveyParticipant> snapshot;
@@ -218,7 +198,6 @@ public class SurveyManager {
         listeners.fire(l -> l.onSurveyClosed(closed, snapshot));
     }
 
-    /** R5-M13: ביטול לפני השליחה — אין משתתפים, אין תוצאות ואין הודעת סיום. */
     public void cancelPendingSurvey() {
         Survey cancelled;
         synchronized (this) {
@@ -271,7 +250,6 @@ public class SurveyManager {
         }
     }
 
-    /* ===================== שאילתות ===================== */
 
     public synchronized boolean isSurveyInProgress() {
         return inProgress();

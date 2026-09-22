@@ -1,9 +1,6 @@
 package org.example;
 
-/**
- * R5-M11: העיכוב והתווית קשורים יחד — אין יותר מערך מקביל ל-ComboBox
- * שנשבר בשקט כשמוסיפים אפשרות.
- */
+
 public enum SurveyDelay {
 
     IMMEDIATE(0, "מיידי"),

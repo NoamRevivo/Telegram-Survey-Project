@@ -16,16 +16,12 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
 
-/**
- * R5-M09: הרכיבים החוזרים של הממשק במקום אחד —
- * מצב ריק, טבלה לקריאה בלבד ומסגרת עם כותרת.
- */
+
 public final class UiFactory {
 
     private UiFactory() {
     }
 
-    /** כרטיס "מצב ריק" מרוכז — החליף את buildIdleCard ואת buildEmptyCard הכפולים. */
     public static JPanel emptyState(Icon icon, String title, String hint) {
         JPanel column = new JPanel();
         column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
@@ -45,7 +41,6 @@ public final class UiFactory {
         return card;
     }
 
-    /** טבלה לקריאה בלבד עם המידות והגופנים האחידים של המערכת. */
     public static JTable readOnlyTable(DefaultTableModel model) {
         JTable table = new JTable(model);
         table.setRowHeight(AppConfig.TABLE_ROW_HEIGHT);
@@ -56,7 +51,6 @@ public final class UiFactory {
         return table;
     }
 
-    /** מודל טבלה שאינו ניתן לעריכה — הבסיס לכל הטבלאות במערכת. */
     public static DefaultTableModel readOnlyModel(Object[] columns) {
         return new DefaultTableModel(columns, 0) {
             @Override
@@ -66,7 +60,6 @@ public final class UiFactory {
         };
     }
 
-    /** רכיב בתוך JScrollPane עם מסגרת כותרת — החליף ארבעה מקומות זהים. */
     public static JPanel titledScroll(String title, Component content) {
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.setBorder(BorderFactory.createTitledBorder(title));

@@ -12,7 +12,6 @@ public class Survey {
     public static final int MAX_QUESTIONS = 3;
 
     private final List<Question> questions;
-    /** מזהה קצר לסקר — נכנס ב-callback_data של כפתורי טלגרם */
     private final String id = String.format("%08x", ThreadLocalRandom.current().nextInt());
     private volatile SurveyStatus status;
     private volatile LocalDateTime startTime;
@@ -45,7 +44,6 @@ public class Survey {
         this.status = status;
     }
 
-    /** שעת השליחה בפועל — מוצגת בכותרת התוצאות הסופיות. */
     public LocalDateTime getStartTime() {
         return startTime;
     }

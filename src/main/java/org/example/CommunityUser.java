@@ -15,7 +15,6 @@ public class CommunityUser {
 
     public CommunityUser(long telegramId, String firstName, String username) {
         this.telegramId = telegramId;
-        // R5-C05: טלגרם מחזיר firstName ריק עבור ערוצים ומנהלים אנונימיים
         this.firstName = (firstName == null || firstName.isBlank()) ? NO_NAME : firstName.trim();
         this.username = (username == null || username.isBlank()) ? null : username.trim();
         this.joinedAt = LocalDateTime.now();

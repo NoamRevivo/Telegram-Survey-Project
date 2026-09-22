@@ -14,7 +14,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CoreModelTest {
 
-    /** R5-L04: מה שנשמר הוא מה שנשלח לטלגרם — בלי רווחים בקצוות. */
     @Test
     void questionTrimsTextAndOptions() {
         Question question = new Question("  מה דעתך?  ", List.of("  כן ", "לא  "));
@@ -35,7 +34,6 @@ class CoreModelTest {
                 () -> new Question("שאלה", List.of("א", "ב", "ג", "ד", "ה")));
     }
 
-    /** R5-C05: משתמש בלי שם אינו הופך ל-"null" על המסך. */
     @Test
     void communityUserFallsBackWhenNameIsMissing() {
         CommunityUser user = new CommunityUser(7L, null, null);
@@ -45,7 +43,6 @@ class CoreModelTest {
         assertFalse(user.toString().contains("null"));
     }
 
-    /** R5-M17: אותו סדר הצטרפות בכל המסכים. */
     @Test
     void membersAreReturnedInJoinOrder() {
         CommunityManager manager = new CommunityManager();

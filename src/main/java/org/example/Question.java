@@ -24,7 +24,6 @@ public class Question {
             throw new IllegalArgumentException(
                     "כל שאלה צריכה " + MIN_OPTIONS + "-" + MAX_OPTIONS + " אפשרויות תשובה");
         }
-        // R5-L04: מה שנשמר הוא מה שנשלח לטלגרם — מנקים רווחים כבר כאן
         List<String> cleaned = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         for (String option : options) {

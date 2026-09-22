@@ -25,9 +25,7 @@ public class CommunityPanel extends JPanel implements CommunityListener {
     private final JLabel totalMembersLabel;
     private final DefaultTableModel tableModel;
     private final JTable table;
-    /** R5-C02: מי כבר מוצג בטבלה — כך addRow נשאר idempotent גם אחרי זריעה ראשונית */
     private final Set<Long> displayedIds = new HashSet<>();
-    /** R5-M03: הצבע המקורי נקרא פעם אחת, לפני שמישהו דרס אותו בירוק */
     private final Color defaultSelectionBackground = UIManager.getColor("Table.selectionBackground");
     private final Timer highlightTimer;
 
@@ -48,7 +46,6 @@ public class CommunityPanel extends JPanel implements CommunityListener {
 
         highlightTimer = createHighlightTimer();
 
-        // R5-C02: מי שהצטרף לפני שהחלון נבנה חייב להופיע — אין כפתור רענון
         for (CommunityUser user : communityManager.getAllMembers()) {
             addRow(user);
         }
@@ -67,7 +64,6 @@ public class CommunityPanel extends JPanel implements CommunityListener {
         });
     }
 
-    /** מוסיף שורה לחבר שעדיין לא מוצג. מחזיר false אם הוא כבר היה שם. */
     private boolean addRow(CommunityUser user) {
         if (!displayedIds.add(user.getTelegramId())) {
             return false;
@@ -84,11 +80,6 @@ public class CommunityPanel extends JPanel implements CommunityListener {
         totalMembersLabel.setText("👥  סה\"כ חברים בקהילה: " + communitySize);
     }
 
-    /**
-     * R5-M03: טיימר יחיד שמתאפס בכל הצטרפות.
-     * הגרסה הקודמת יצרה טיימר חדש שקרא את הצבע ה"מקורי" בזמן שהוא כבר היה ירוק,
-     * ולכן שני מצטרפים תוך 1.5 שניות השאירו את צבע הבחירה ירוק לצמיתות.
-     */
     private Timer createHighlightTimer() {
         Timer timer = new Timer(AppConfig.HIGHLIGHT_MILLIS, e -> {
             table.clearSelection();

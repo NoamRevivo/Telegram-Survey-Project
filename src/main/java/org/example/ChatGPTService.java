@@ -20,7 +20,6 @@ public class ChatGPTService {
 
     private static final Logger LOG = Logger.getLogger(ChatGPTService.class.getName());
 
-    /** R5-M04: הטוקן והכתובת מוזרקים — המחלקה ניתנת לבדיקה מול שרת דמה */
     private final String token;
     private final String endpoint;
     private final OkHttpClient client;
@@ -48,7 +47,6 @@ public class ChatGPTService {
         if (baseUrl == null) {
             throw new SurveyGenerationException("כתובת שירות יצירת השאלות אינה תקינה: " + endpoint);
         }
-        // R5-M04: הטוקן עובר ב-header ולא ב-URL — פרמטרים ב-URL נרשמים בלוגים של שרתים ופרוקסי
         HttpUrl url = baseUrl.newBuilder()
                 .addQueryParameter("text", buildPrompt(topic))
                 .build();
@@ -64,13 +62,11 @@ public class ChatGPTService {
                         + ". " + snippet(responseBody));
             }
             if (responseBody.isBlank()) {
-                // גוף ריק עם סטטוס תקין = כמעט תמיד נתיב endpoint שגוי
                 throw new SurveyGenerationException("השרת החזיר תגובה ריקה. "
                         + "בדוק שכתובת ה-API כוללת את הנתיב המלא ושהטוקן תקין.");
             }
             return parseQuestions(responseBody);
         } catch (IOException e) {
-            // R5-M14: ביטול מצד המשתמש מגיע לכאן כ-InterruptedIOException
             throw new SurveyGenerationException("הפנייה לשירות יצירת השאלות נכשלה: " + e.getMessage(), e);
         }
     }
@@ -87,7 +83,6 @@ public class ChatGPTService {
         List<Question> questions = new ArrayList<>();
         JSONObject json = parseJsonObject(responseBody);
 
-        // השירות עוטף לפעמים את ה-JSON בשדה "value" — כמחרוזת או כאובייקט
         Object wrapped = json.opt("value");
         if (wrapped instanceof JSONObject) {
             json = (JSONObject) wrapped;
@@ -105,7 +100,6 @@ public class ChatGPTService {
             try {
                 questions.add(parseQuestion(questionsArray.getJSONObject(i)));
             } catch (RuntimeException e) {
-                // שאלה פגומה מדולגת ולא מפילה את השאלות התקינות
                 LOG.log(Level.FINE, "שאלה " + (i + 1) + " מהשירות דולגה: " + e.getMessage(), e);
             }
         }
@@ -115,10 +109,7 @@ public class ChatGPTService {
         return questions;
     }
 
-    /**
-     * ChatGPT מחזיר לעיתים יותר אפשרויות מהמותר או אפשרויות כפולות —
-     * במקום לפסול את השאלה כולה, מנקים ומקצצים למה שתקין.
-     */
+
     private Question parseQuestion(JSONObject questionJson) {
         String text = String.valueOf(questionJson.get("text")).trim();
 

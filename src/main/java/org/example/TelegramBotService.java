@@ -9,11 +9,7 @@ import java.time.Duration;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * R5-M08: הצד הנכנס של הבוט — פקודות ולחיצות על כפתורים.
- * התעבורה ב-{@link TelegramGateway}, הטקסטים ב-{@link MessageTemplates},
- * וההודעות היוצאות ב-{@link BotNotifier}.
- */
+
 public class TelegramBotService implements TelegramGateway.UpdateHandler {
 
     private static final Logger LOG = Logger.getLogger(TelegramBotService.class.getName());
@@ -39,18 +35,15 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
         surveyManager.addSurveyListener(notifier);
     }
 
-    /** הרכיב שנרשם מול TelegramBotsApi. */
     public TelegramGateway gateway() {
         return gateway;
     }
 
-    /* ===================== הודעות נכנסות ===================== */
 
     @Override
     public void onMessage(Message message) {
         User from = message.getFrom();
         if (from == null) {
-            // R5-C05: הודעה בשם ערוץ או מנהל אנונימי — אין משתמש לצרף
             LOG.fine("התקבלה הודעה ללא שולח — מתעלם");
             return;
         }
@@ -80,7 +73,6 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
         return false;
     }
 
-    /** R5-C05: שם בטוח גם כשטלגרם לא החזיר firstName — במקום «ברוך הבא, null». */
     private static String safeName(User user) {
         String first = user.getFirstName();
         if (first != null && !first.isBlank()) {
@@ -90,7 +82,6 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
         return (userName != null && !userName.isBlank()) ? "@" + userName : "חבר/ה";
     }
 
-    /* ===================== לחיצות על כפתורים ===================== */
 
     @Override
     public void onCallback(CallbackQuery callbackQuery) {
@@ -141,11 +132,7 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
                 surveyManager.recordAnswer(from.getId(), question.getId(), chosenOption);
 
         if (result == SurveyManager.AnswerResult.RECORDED) {
-            /*
-             * R5-M05: getMessage() מחזיר MaybeInaccessibleMessage — הודעה שטלגרם
-             * כבר אינו מאפשר לבוט לגשת לתוכנה. רק Message אמיתית ניתנת לעריכה,
-             * ורק ממנה אפשר לקחת את מזהה הצ'אט הנכון (ולא את זה של המשתמש).
-             */
+
             if (callbackQuery.getMessage() instanceof Message message) {
                 notifier.markChosenAnswer(message.getChatId(), message.getMessageId(),
                         question, chosenOption, questionIndex, survey.getQuestions().size());
@@ -162,8 +149,6 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
             return -1;
         }
     }
-
-    /** R5-M06: כיבוי שאינו קוטע הודעות סיום שנמצאות באוויר. */
     public void shutdownGracefully(Duration timeout) {
         gateway.shutdownGracefully(timeout);
     }
