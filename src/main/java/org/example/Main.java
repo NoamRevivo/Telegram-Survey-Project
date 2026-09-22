@@ -17,7 +17,6 @@ public class Main {
     private static final Logger LOG = Logger.getLogger(Main.class.getName());
 
     public static void main(String[] args) {
-        // R5-C04: שום חריגה בשום חוט לא תיעלם בשקט
         Thread.setDefaultUncaughtExceptionHandler(
                 (thread, error) -> LOG.log(Level.SEVERE, "חריגה לא מטופלת בחוט " + thread.getName(), error));
 
@@ -28,7 +27,6 @@ public class Main {
                     + " / " + AppConfig.ENV_BOT_TOKEN + ".\nיש להגדיר אותם ב-Run Configuration.");
             return;
         }
-
         CommunityManager communityManager = new CommunityManager();
         SurveyManager surveyManager = new SurveyManager(communityManager);
         ChatGPTService chatGPTService = new ChatGPTService(
@@ -37,10 +35,6 @@ public class Main {
         TelegramBotService botService =
                 new TelegramBotService(botUsername, botToken, communityManager, surveyManager);
 
-        /*
-         * R5-C02 + R5-M07: הממשק נבנה במלואו לפני רישום הבוט, וכולו על ה-EDT.
-         * בסדר ההפוך, חבר שהצטרף בין registerBot לבין בניית החלון לא היה מופיע לעולם.
-         */
         final MainFrame[] frameHolder = new MainFrame[1];
         try {
             SwingUtilities.invokeAndWait(() -> {
@@ -65,7 +59,6 @@ public class Main {
             return;
         }
 
-        // R5-M06: כיבוי מסודר — קודם מפסיקים לקלוט, ואז נותנים להודעות שבאוויר להסתיים
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (session.isRunning()) {
                 session.stop();
@@ -76,8 +69,7 @@ public class Main {
         }, "shutdown-hook"));
     }
 
-    /** R5-M07: כל פעולות Swing, כולל הגדרת ה-Look&Feel, מתבצעות על ה-EDT. */
-    private static void applyLookAndFeel() {
+        private static void applyLookAndFeel() {
         try {
             UIManager.put("Component.accentColor", UiTheme.BRAND_BLUE);
             UIManager.put("Button.arc", 14);
@@ -90,7 +82,7 @@ public class Main {
         }
     }
 
-    private static void showFatal(String message) {
+        private static void showFatal(String message) {
         try {
             SwingUtilities.invokeAndWait(() ->
                     JOptionPane.showMessageDialog(null, message, "שגיאה בהפעלה", JOptionPane.ERROR_MESSAGE));
