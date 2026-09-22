@@ -18,6 +18,8 @@ public class AddQuestionDialog extends JDialog {
 
     public AddQuestionDialog(Frame owner, Question existing) {
         super(owner, existing == null ? "➕ הוספת שאלה" : "✏️ עריכת שאלה", true);
+        // R5-M02: ברירת המחדל HIDE_ON_CLOSE מדליפה חלון בכל סגירה ב-X
+        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
         ((JPanel) getContentPane()).setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
 
@@ -89,7 +91,7 @@ public class AddQuestionDialog extends JDialog {
             }
         }
 
-        // L-03: Enter מאשר, Esc סוגר, גודל לפי התוכן. M-13: ימין-לשמאל
+        // Enter מאשר, Esc סוגר, גודל לפי התוכן, ימין-לשמאל
         getRootPane().setDefaultButton(confirmButton);
         getRootPane().registerKeyboardAction(e -> dispose(),
                 KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -126,8 +128,13 @@ public class AddQuestionDialog extends JDialog {
         return false;
     }
 
+    /** R5-M02: החלון משוחרר בכל מסלול יציאה — אישור, ביטול, Esc או X. */
     public Question showDialog() {
-        setVisible(true);
-        return result;
+        try {
+            setVisible(true);   // מודאלי — חוסם עד סגירה
+            return result;
+        } finally {
+            dispose();
+        }
     }
 }

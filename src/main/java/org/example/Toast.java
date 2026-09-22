@@ -6,8 +6,8 @@ import java.util.logging.Logger;
 
 /**
  * בועת התראה מונפשת שאינה חוסמת את המשתמש.
- * מחליפה את MemberJoinToast ומשמשת לכל ההתראות החיוביות במערכת:
- * הצטרפות חבר, סיום יצירת שאלות ב-ChatGPT, והתחלת סקר.
+ * משמשת לכל ההתראות החיוביות במערכת: הצטרפות חבר,
+ * סיום יצירת שאלות ב-ChatGPT, והתחלת סקר.
  */
 public class Toast extends JWindow {
 
@@ -28,6 +28,8 @@ public class Toast extends JWindow {
     private static final int VISIBLE_MILLIS = 2600;
 
     private boolean opacitySupported = true;
+    /** R5-L07: האם הבועה הזו נספרה — כדי שהמונה יירד בדיוק פעם אחת */
+    private boolean counted;
     /** כמה בועות מוצגות כרגע, כדי שבועה חדשה תופיע מעל הקודמת (EDT בלבד) */
     private static int visibleCount = 0;
 
@@ -62,7 +64,7 @@ public class Toast extends JWindow {
 
         JLabel label = new JLabel(message, SwingConstants.CENTER);
         label.setForeground(Color.WHITE);
-        label.setFont(label.getFont().deriveFont(Font.BOLD, 14f));
+        label.setFont(label.getFont().deriveFont(Font.BOLD, UiTheme.FONT_BODY));
         bubble.add(label, BorderLayout.CENTER);
 
         setContentPane(bubble);
@@ -86,6 +88,7 @@ public class Toast extends JWindow {
         int targetX = ownerBounds.x + (ownerBounds.width - WIDTH) / 2;
         int targetY = ownerBounds.y + ownerBounds.height - HEIGHT - 50 - visibleCount * (HEIGHT + 8);
         visibleCount++;
+        counted = true;
         int startY = ownerBounds.y + ownerBounds.height;
 
         setLocation(targetX, startY);
@@ -117,7 +120,6 @@ public class Toast extends JWindow {
 
     private void fadeOutAndClose() {
         if (!opacitySupported) {
-            visibleCount--;
             dispose();
             return;
         }
@@ -130,11 +132,23 @@ public class Toast extends JWindow {
             trySetOpacity(opacity);
             if (opacity <= 0f) {
                 fadeTimer.stop();
-                visibleCount--;
                 dispose();
             }
         });
         fadeTimer.start();
+    }
+
+    /**
+     * R5-L07: המונה יורד כאן ולא בתוך הטיימר —
+     * בועה שנסגרה בדרך אחרת (סגירת חלון האב, dispose חיצוני) לא משאירה את המונה תקוע גבוה.
+     */
+    @Override
+    public void dispose() {
+        if (counted) {
+            counted = false;
+            visibleCount = Math.max(0, visibleCount - 1);
+        }
+        super.dispose();
     }
 
     private void trySetOpacity(float value) {

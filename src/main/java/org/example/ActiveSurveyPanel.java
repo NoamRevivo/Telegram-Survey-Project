@@ -1,15 +1,32 @@
 package org.example;
 
-import javax.swing.*;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JProgressBar;
+import javax.swing.JTable;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GridLayout;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ActiveSurveyPanel extends JPanel implements SurveyListener
-{
+public class ActiveSurveyPanel extends JPanel implements SurveyListener {
+
     private static final String CARD_IDLE = "idle";
     private static final String CARD_LIVE = "live";
 
@@ -36,117 +53,73 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
     private final Map<Long, Integer> rowByTelegramId = new HashMap<>();
 
     private int totalQuestions;
-    private java.util.List<SurveyParticipant> currentParticipants;
+    private List<SurveyParticipant> currentParticipants;
 
-    /** בסיס פס ההתקדמות נקבע לפי השלב הנוכחי (המתנה מול סקר פעיל) */
+    /**
+     * R5-C01: מזהה הסקר שכבר נסגר על המסך.
+     * טיק שהיה באוויר ברגע הסגירה מגיע ל-EDT אחרי onSurveyClosed — והוא נזרק כאן,
+     * במקום לדרוס את מסך הסיום ולהחזיר כפתור "סיים סקר" פעיל שלא עושה כלום.
+     */
+    private String closedSurveyId;
+    /** האם השלב הנוכחי הוא המתנה לשליחה — קובע את נוסח כפתור העצירה (R5-M13) */
+    private boolean pendingPhase;
+
     private int phaseMaxSeconds = 1;
     private boolean lastPhaseWasPending;
     private boolean phaseInitialized;
     private boolean blinkOn;
 
-    public ActiveSurveyPanel(SurveyManager surveyManager)
-    {
+    public ActiveSurveyPanel(SurveyManager surveyManager) {
         this.surveyManager = surveyManager;
 
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
 
-        tableModel = new DefaultTableModel(new Object[]{"שם", "התקדמות", "סטטוס"}, 0)
-        {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-        };
-        table = new JTable(tableModel);
-        table.setRowHeight(28);
-        table.setFont(table.getFont().deriveFont(14f));
-        table.getTableHeader().setFont(table.getTableHeader().getFont().deriveFont(Font.BOLD, 14f));
+        tableModel = UiFactory.readOnlyModel(new Object[]{"שם", "התקדמות", "סטטוס"});
+        table = UiFactory.readOnlyTable(tableModel);
         table.setDefaultRenderer(Object.class, new StatusRowRenderer());
 
-        cardHolder.add(buildIdleCard(), CARD_IDLE);
+        cardHolder.add(UiFactory.emptyState(AppIcons.active(48), "אין סקר פעיל כרגע",
+                "עברו ללשונית «יצירת סקר» כדי לבנות שאלות ולשלוח אותן לקהילה."), CARD_IDLE);
         cardHolder.add(buildLiveCard(), CARD_LIVE);
         add(cardHolder, BorderLayout.CENTER);
         cards.show(cardHolder, CARD_IDLE);
     }
 
-    /** מצב ריק מנחה במקום "--:--" וטבלה ריקה */
-    private JPanel buildIdleCard() {
-        JLabel icon = new JLabel(AppIcons.active(48), SwingConstants.CENTER);
-        icon.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JLabel title = new JLabel("אין סקר פעיל כרגע", SwingConstants.CENTER);
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 20f));
-        title.setForeground(UiTheme.BRAND_DARK_BLUE);
-        title.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JLabel hint = new JLabel("עברו ללשונית «יצירת סקר» כדי לבנות שאלות ולשלוח אותן לקהילה.",
-                SwingConstants.CENTER);
-        hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 14f));
-        hint.setForeground(UiTheme.MUTED_TEXT);
-        hint.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JPanel column = new JPanel();
-        column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
-        column.add(Box.createVerticalGlue());
-        column.add(icon);
-        column.add(Box.createVerticalStrut(14));
-        column.add(title);
-        column.add(Box.createVerticalStrut(8));
-        column.add(hint);
-        column.add(Box.createVerticalGlue());
-
-        JPanel card = new JPanel(new BorderLayout());
-        card.add(column, BorderLayout.CENTER);
-        return card;
-    }
-
     private JPanel buildLiveCard() {
-        countdownLabel.setFont(countdownLabel.getFont().deriveFont(Font.BOLD, 38f));
-        countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
+        UiFactory.styled(countdownLabel, Font.BOLD, UiTheme.FONT_COUNTDOWN, UiTheme.BRAND_DARK_BLUE);
 
-        // פס התקדמות שמתרוקן — קריא הרבה יותר ממספר בודד
         countdownBar.setMinimum(0);
         countdownBar.setMaximum(1);
         countdownBar.setValue(0);
         countdownBar.setForeground(UiTheme.SUCCESS_GREEN);
-        countdownBar.setPreferredSize(new Dimension(10, 14));
+        countdownBar.setPreferredSize(new Dimension(10, AppConfig.PROGRESS_BAR_HEIGHT));
 
-        phaseNoteLabel.setFont(phaseNoteLabel.getFont().deriveFont(Font.PLAIN, 13f));
-        phaseNoteLabel.setForeground(UiTheme.MUTED_TEXT);
+        UiFactory.styled(phaseNoteLabel, Font.PLAIN, UiTheme.FONT_SMALL, UiTheme.MUTED_TEXT);
 
         JPanel countdownPanel = new JPanel();
         countdownPanel.setLayout(new BoxLayout(countdownPanel, BoxLayout.Y_AXIS));
         countdownPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 12, 0));
-        countdownLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        countdownBar.setAlignmentX(Component.CENTER_ALIGNMENT);
-        phaseNoteLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
-        countdownPanel.add(countdownLabel);
+        countdownPanel.add(UiFactory.centered(countdownLabel));
         countdownPanel.add(Box.createVerticalStrut(8));
-        countdownPanel.add(countdownBar);
+        countdownPanel.add(UiFactory.centered(countdownBar));
         countdownPanel.add(Box.createVerticalStrut(6));
-        countdownPanel.add(phaseNoteLabel);
+        countdownPanel.add(UiFactory.centered(phaseNoteLabel));
 
         JPanel statsPanel = new JPanel(new GridLayout(1, 3, 12, 10));
-        for (JLabel label : new JLabel[]{totalLabel, finishedLabel, pendingLabel})
-        {
+        for (JLabel label : new JLabel[]{totalLabel, finishedLabel, pendingLabel}) {
             label.setHorizontalAlignment(SwingConstants.CENTER);
-            label.setFont(label.getFont().deriveFont(Font.BOLD, 14f));
+            label.setFont(label.getFont().deriveFont(Font.BOLD, UiTheme.FONT_BODY));
             label.setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createLineBorder(UiTheme.PANEL_BORDER, 1, true),
                     BorderFactory.createEmptyBorder(10, 6, 10, 6)));
             statsPanel.add(label);
         }
 
-        JPanel tableWrapper = new JPanel(new BorderLayout());
-        tableWrapper.setBorder(BorderFactory.createTitledBorder("משתתפי הסקר"));
-        tableWrapper.add(new JScrollPane(table), BorderLayout.CENTER);
-
         JPanel centerPanel = new JPanel(new BorderLayout(10, 10));
         centerPanel.add(statsPanel, BorderLayout.NORTH);
-        centerPanel.add(tableWrapper, BorderLayout.CENTER);
+        centerPanel.add(UiFactory.titledScroll("משתתפי הסקר", table), BorderLayout.CENTER);
 
-        // אפשרות לסגור סקר לפני תום הזמן — עד עכשיו המנהל היה נעול ל-5 דקות
         stopButton.setToolTipText("סוגר את הסקר מיד ומציג את התוצאות שנאספו עד כה");
         stopButton.setForeground(UiTheme.ERROR_RED);
         stopButton.addActionListener(e -> onStopSurvey());
@@ -160,41 +133,49 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
         return card;
     }
 
+    /** R5-M13: ביטול לפני השליחה הוא פעולה אחרת מסגירת סקר פעיל — גם בנוסח וגם בקוד. */
     private void onStopSurvey() {
-        int answer = JOptionPane.showConfirmDialog(this,
-                "לסגור את הסקר עכשיו?\nהתשובות שנאספו עד כה יישמרו ויוצגו בלשונית «תוצאות».",
-                "סיום סקר",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.QUESTION_MESSAGE);
-        if (answer == JOptionPane.YES_OPTION) {
-            stopButton.setEnabled(false);
-            if (lastPhaseWasPending) {
-                surveyManager.cancelPendingSurvey();
-            } else {
-                surveyManager.closeSurvey();
-            }
+        boolean cancelBeforeSending = pendingPhase;
+        String message = cancelBeforeSending
+                ? "לבטל את הסקר לפני השליחה?\nהשאלות לא יישלחו לאף אחד ולא ייווצרו תוצאות."
+                : "לסגור את הסקר עכשיו?\nהתשובות שנאספו עד כה יישמרו ויוצגו בלשונית «תוצאות».";
+        String title = cancelBeforeSending ? "ביטול סקר" : "סיום סקר";
+        int answer = JOptionPane.showConfirmDialog(this, message, title,
+                JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (answer != JOptionPane.YES_OPTION) {
+            return;
+        }
+        stopButton.setEnabled(false);
+        if (cancelBeforeSending) {
+            surveyManager.cancelPendingSurvey();
+        } else {
+            surveyManager.closeSurvey();
         }
     }
 
     @Override
     public void onCountdownTick(String surveyId, int secondsRemaining, boolean isPendingPhase) {
         SwingUtilities.invokeLater(() -> {
+            if (surveyId.equals(closedSurveyId)) {
+                return;   // R5-C01: טיק מאוחר של סקר שכבר נסגר
+            }
+            pendingPhase = isPendingPhase;
             cards.show(cardHolder, CARD_LIVE);
             stopButton.setEnabled(true);
+            stopButton.setText(isPendingPhase ? "⏹ בטל את הסקר" : "⏹ סיים סקר עכשיו");
             updatePhaseBase(secondsRemaining, isPendingPhase);
 
             String mmss = String.format("%02d:%02d", secondsRemaining / 60, secondsRemaining % 60);
             boolean lastSeconds = !isPendingPhase
-                    && secondsRemaining <= SurveyManager.FINAL_WARNING_SECONDS_BEFORE_END;
+                    && secondsRemaining <= AppConfig.FINAL_WARNING_SECONDS_BEFORE_END;
 
             countdownLabel.setText(isPendingPhase
                     ? "⏳ הסקר יישלח בעוד: " + mmss
                     : (lastSeconds ? "⚠ " : "⏱ ") + "זמן לסיום הסקר: " + mmss);
 
             if (lastSeconds) {
-                // הבהוב עדין בשניות האחרונות — הטיק הוא פעם בשנייה
                 blinkOn = !blinkOn;
-                countdownLabel.setForeground(blinkOn ? UiTheme.ERROR_RED : new Color(0xFF7A70));
+                countdownLabel.setForeground(blinkOn ? UiTheme.ERROR_RED : UiTheme.ERROR_RED_SOFT);
             } else {
                 countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
             }
@@ -222,28 +203,36 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
             return UiTheme.BRAND_BLUE;
         }
         float ratio = secondsRemaining / (float) phaseMaxSeconds;
-        if (ratio > 0.5f) {
+        if (ratio > AppConfig.BAR_WARN_RATIO) {
             return UiTheme.SUCCESS_GREEN;
         }
-        return ratio > 0.2f ? UiTheme.WARNING_ORANGE : UiTheme.ERROR_RED;
+        return ratio > AppConfig.BAR_DANGER_RATIO ? UiTheme.WARNING_ORANGE : UiTheme.ERROR_RED;
     }
 
     @Override
-    public void onSurveyStarted(Survey survey, java.util.List<SurveyParticipant> participants) {
+    public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
         SwingUtilities.invokeLater(() -> {
+            this.closedSurveyId = null;
+            this.pendingPhase = false;
             this.totalQuestions = survey.getQuestions().size();
             this.currentParticipants = participants;
             tableModel.setRowCount(0);
             rowByTelegramId.clear();
             int row = 0;
             for (SurveyParticipant p : participants) {
-                tableModel.addRow(new Object[]{p.getUser().toString(), "0/" + totalQuestions, STATUS_WAITING});
+                tableModel.addRow(new Object[]{
+                        p.getUser().toString(), "0/" + totalQuestions, STATUS_WAITING});
                 rowByTelegramId.put(p.getUser().getTelegramId(), row++);
             }
             stopButton.setEnabled(true);
+            stopButton.setText("⏹ סיים סקר עכשיו");
+            // R5-M15: השעון מתחיל רק כשההפצה מסתיימת — עד אז אומרים את זה במפורש
+            countdownLabel.setText("📤 שולח את השאלות…");
+            countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
+            phaseNoteLabel.setText("השאלות נשלחות למשתתפים — הספירה תתחיל כשכולם יקבלו אותן");
             cards.show(cardHolder, CARD_LIVE);
             refreshStats();
-            UiTheme.applyRtl(this);   // תוכן שנבנה עכשיו חייב יישור מחדש
+            UiTheme.applyRtl(this);
         });
     }
 
@@ -252,7 +241,8 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
         SwingUtilities.invokeLater(() -> {
             Integer row = rowByTelegramId.get(participant.getUser().getTelegramId());
             if (row != null) {
-                tableModel.setValueAt(participant.getAnsweredQuestionsCount() + "/" + totalQuestions, row, 1);
+                tableModel.setValueAt(
+                        participant.getAnsweredQuestionsCount() + "/" + totalQuestions, row, 1);
                 tableModel.setValueAt(statusLabelFor(participant), row, 2);
             }
             refreshStats();
@@ -262,6 +252,8 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
     @Override
     public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
         SwingUtilities.invokeLater(() -> {
+            closedSurveyId = survey.getId();
+            pendingPhase = false;
             countdownLabel.setText("🏁 הסקר הסתיים");
             countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
             countdownBar.setValue(0);
@@ -269,7 +261,6 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
             stopButton.setEnabled(false);
             phaseInitialized = false;
 
-            // רק עכשיו הצבע האדום נכון — מי שלא סיים באמת פספס את הסקר
             for (SurveyParticipant p : participants) {
                 Integer row = rowByTelegramId.get(p.getUser().getTelegramId());
                 if (row != null && !p.isCompleted()) {
@@ -278,6 +269,21 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
             }
             table.repaint();
             refreshStats();
+        });
+    }
+
+    /** R5-M13: סקר שבוטל לפני השליחה חוזר למסך "אין סקר פעיל", בלי מסך סיום מטעה. */
+    @Override
+    public void onSurveyCancelled(Survey survey) {
+        SwingUtilities.invokeLater(() -> {
+            closedSurveyId = survey.getId();
+            pendingPhase = false;
+            phaseInitialized = false;
+            currentParticipants = null;
+            tableModel.setRowCount(0);
+            rowByTelegramId.clear();
+            stopButton.setEnabled(false);
+            cards.show(cardHolder, CARD_IDLE);
         });
     }
 
@@ -311,7 +317,6 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
             } else if (STATUS_MISSED.equals(status)) {
                 c.setBackground(UiTheme.ROW_MISSED);
             } else {
-                // המתנה היא מצב ניטרלי, לא שגיאה — אין סיבה לצבוע אותה באדום
                 c.setBackground(UiTheme.ROW_WAITING);
             }
             if (isSelected) {

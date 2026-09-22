@@ -6,11 +6,12 @@ import java.awt.geom.Path2D;
 
 public final class AppIcons {
 
-    public interface Painter {
+    /** R5-L01: פנימי — הקוד היחיד שמצייר סמלים נמצא במחלקה הזו */
+    private interface Painter {
         void paint(Graphics2D g, int size);
     }
 
-    public static Icon badge(int size, Color background, Painter painter) {
+    private static Icon badge(int size, Color background, Painter painter) {
         return new Icon() {
             @Override
             public void paintIcon(Component c, Graphics g, int x, int y) {
@@ -83,10 +84,6 @@ public final class AppIcons {
             star.closePath();
             g.fill(star);
         });
-    }
-
-    public static Icon robot(int size) {
-        return badge(size, UiTheme.BRAND_DARK_BLUE, (g, s) -> paintRobotFace(g, s, Color.WHITE));
     }
 
     public static Icon robotOnLight(int size) {
