@@ -7,25 +7,25 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class Survey {
+
     public static final int MIN_QUESTIONS = 1;
     public static final int MAX_QUESTIONS = 3;
 
     private final List<Question> questions;
-    private final int delayMinutes;
-    /** C-02: מזהה קצר לסקר — נכנס ב-callback של הכפתורים בטלגרם */
+    /** מזהה קצר לסקר — נכנס ב-callback_data של כפתורי טלגרם */
     private final String id = String.format("%08x", ThreadLocalRandom.current().nextInt());
     private volatile SurveyStatus status;
     private volatile LocalDateTime startTime;
 
     public Survey(List<Question> questions, int delayMinutes) {
         if (questions == null || questions.size() < MIN_QUESTIONS || questions.size() > MAX_QUESTIONS) {
-            throw new IllegalArgumentException("סקר צריך להכיל " + MIN_QUESTIONS + "-" + MAX_QUESTIONS + " שאלות");
+            throw new IllegalArgumentException(
+                    "סקר צריך להכיל " + MIN_QUESTIONS + "-" + MAX_QUESTIONS + " שאלות");
         }
         if (delayMinutes < 0) {
             throw new IllegalArgumentException("זמן עיכוב לא יכול להיות שלילי");
         }
         this.questions = new ArrayList<>(questions);
-        this.delayMinutes = delayMinutes;
         this.status = SurveyStatus.PENDING;
     }
 
@@ -37,10 +37,6 @@ public class Survey {
         return Collections.unmodifiableList(questions);
     }
 
-    public int getDelayMinutes() {
-        return delayMinutes;
-    }
-
     public SurveyStatus getStatus() {
         return status;
     }
@@ -49,18 +45,12 @@ public class Survey {
         this.status = status;
     }
 
+    /** שעת השליחה בפועל — מוצגת בכותרת התוצאות הסופיות. */
     public LocalDateTime getStartTime() {
         return startTime;
     }
 
     public void setStartTime(LocalDateTime startTime) {
         this.startTime = startTime;
-    }
-
-    public Question getQuestionById(String id) {
-        return questions.stream()
-                .filter(q -> q.getId().equals(id))
-                .findFirst()
-                .orElse(null);
     }
 }

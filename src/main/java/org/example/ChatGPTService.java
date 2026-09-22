@@ -1,15 +1,14 @@
 package org.example;
 
+import okhttp3.HttpUrl;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
-import okhttp3.HttpUrl;
-
-import java.time.Duration;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -21,68 +20,71 @@ public class ChatGPTService {
 
     private static final Logger LOG = Logger.getLogger(ChatGPTService.class.getName());
 
-    private static final String API_ENDPOINT = "https://shaitest-production-3066.up.railway.app/api-request";
-    private static final String TOKEN = System.getenv("SURVEY_API_TOKEN");
-    private static final Duration TIMEOUT = Duration.ofSeconds(30);
-    /** אורך מקסימלי של קטע מהתגובה שמוצג בהודעת שגיאה */
-    private static final int SNIPPET_LENGTH = 200;
-
+    /** R5-M04: הטוקן והכתובת מוזרקים — המחלקה ניתנת לבדיקה מול שרת דמה */
+    private final String token;
+    private final String endpoint;
     private final OkHttpClient client;
 
-    public ChatGPTService() {
+    public ChatGPTService(String token, String endpoint) {
+        this.token = token;
+        this.endpoint = endpoint;
         this.client = new OkHttpClient.Builder()
-                .connectTimeout(TIMEOUT)
-                .readTimeout(TIMEOUT)
-                .writeTimeout(TIMEOUT)
+                .connectTimeout(AppConfig.API_TIMEOUT)
+                .readTimeout(AppConfig.API_TIMEOUT)
+                .writeTimeout(AppConfig.API_TIMEOUT)
                 .build();
     }
 
-    public List<Question> generateSurvey(String topic) throws Exception {
-        if (TOKEN == null || TOKEN.isBlank()) {
-            throw new IllegalStateException("חסר משתנה הסביבה SURVEY_API_TOKEN — לא ניתן ליצור שאלות אוטומטית.");
+    public List<Question> generateSurvey(String topic) throws SurveyGenerationException {
+        if (token == null || token.isBlank()) {
+            throw new SurveyGenerationException("חסר משתנה הסביבה "
+                    + AppConfig.ENV_SURVEY_API_TOKEN + " — לא ניתן ליצור שאלות אוטומטית.");
         }
         if (topic == null || topic.isBlank()) {
-            throw new IllegalArgumentException("נושא הסקר לא יכול להיות ריק.");
+            throw new SurveyGenerationException("נושא הסקר לא יכול להיות ריק.");
         }
 
-        String prompt = "Create a survey with 1-" + Survey.MAX_QUESTIONS + " questions about: " + topic +
-                "\nFor each question, provide " + Question.MIN_OPTIONS + "-" + Question.MAX_OPTIONS
-                + " answer options.\n" +
-                "Return ONLY valid JSON with this format:\n" +
-                "{\"questions\": [{\"text\": \"question?\", \"options\": [\"a\", \"b\"]}, ...]}";
-
-        // כתובת לא תקינה נכשלת כאן עם הודעה ברורה, במקום ב-NullPointerException
-        HttpUrl baseUrl = HttpUrl.parse(API_ENDPOINT);
+        HttpUrl baseUrl = HttpUrl.parse(endpoint);
         if (baseUrl == null) {
-            throw new IllegalStateException("כתובת שירות יצירת השאלות אינה תקינה: " + API_ENDPOINT);
+            throw new SurveyGenerationException("כתובת שירות יצירת השאלות אינה תקינה: " + endpoint);
         }
+        // R5-M04: הטוקן עובר ב-header ולא ב-URL — פרמטרים ב-URL נרשמים בלוגים של שרתים ופרוקסי
         HttpUrl url = baseUrl.newBuilder()
-                .addQueryParameter("token", TOKEN)
-                .addQueryParameter("text", prompt)
+                .addQueryParameter("text", buildPrompt(topic))
                 .build();
-
-        Request req = new Request.Builder()
+        Request request = new Request.Builder()
                 .url(url)
+                .header("Authorization", "Bearer " + token)
                 .build();
 
-        try (Response response = client.newCall(req).execute()) {
+        try (Response response = client.newCall(request).execute()) {
             String responseBody = response.body() == null ? "" : response.body().string();
             if (!response.isSuccessful()) {
-                throw new RuntimeException("שירות יצירת השאלות החזיר שגיאה " + response.code()
+                throw new SurveyGenerationException("שירות יצירת השאלות החזיר שגיאה " + response.code()
                         + ". " + snippet(responseBody));
             }
             if (responseBody.isBlank()) {
                 // גוף ריק עם סטטוס תקין = כמעט תמיד נתיב endpoint שגוי
-                throw new RuntimeException("השרת החזיר תגובה ריקה. "
+                throw new SurveyGenerationException("השרת החזיר תגובה ריקה. "
                         + "בדוק שכתובת ה-API כוללת את הנתיב המלא ושהטוקן תקין.");
             }
             return parseQuestions(responseBody);
+        } catch (IOException e) {
+            // R5-M14: ביטול מצד המשתמש מגיע לכאן כ-InterruptedIOException
+            throw new SurveyGenerationException("הפנייה לשירות יצירת השאלות נכשלה: " + e.getMessage(), e);
         }
     }
 
-    private List<Question> parseQuestions(String responseBody) {
-        List<Question> questions = new ArrayList<>();
+    private String buildPrompt(String topic) {
+        return "Create a survey with 1-" + Survey.MAX_QUESTIONS + " questions about: " + topic
+                + "\nFor each question, provide " + Question.MIN_OPTIONS + "-" + Question.MAX_OPTIONS
+                + " answer options.\n"
+                + "Return ONLY valid JSON with this format:\n"
+                + "{\"questions\": [{\"text\": \"question?\", \"options\": [\"a\", \"b\"]}, ...]}";
+    }
 
+    private List<Question> parseQuestions(String responseBody) throws SurveyGenerationException {
+        List<Question> questions = new ArrayList<>();
         JSONObject json = parseJsonObject(responseBody);
 
         // השירות עוטף לפעמים את ה-JSON בשדה "value" — כמחרוזת או כאובייקט
@@ -94,7 +96,8 @@ public class ChatGPTService {
         }
 
         if (!json.has("questions")) {
-            throw new RuntimeException("התשובה מהשירות אינה מכילה שאלות. התקבל: " + snippet(responseBody));
+            throw new SurveyGenerationException(
+                    "התשובה מהשירות אינה מכילה שאלות. התקבל: " + snippet(responseBody));
         }
         JSONArray questionsArray = json.getJSONArray("questions");
 
@@ -102,19 +105,17 @@ public class ChatGPTService {
             try {
                 questions.add(parseQuestion(questionsArray.getJSONObject(i)));
             } catch (RuntimeException e) {
-                // C-07: שאלה פגומה מדולגת ולא מפילה את השאלות התקינות
+                // שאלה פגומה מדולגת ולא מפילה את השאלות התקינות
                 LOG.log(Level.FINE, "שאלה " + (i + 1) + " מהשירות דולגה: " + e.getMessage(), e);
             }
         }
         if (questions.isEmpty()) {
-            throw new RuntimeException("לא התקבלה אף שאלה תקינה מהשירות.");
+            throw new SurveyGenerationException("לא התקבלה אף שאלה תקינה מהשירות.");
         }
-
         return questions;
     }
 
     /**
-     * בונה שאלה אחת מתוך ה-JSON.
      * ChatGPT מחזיר לעיתים יותר אפשרויות מהמותר או אפשרויות כפולות —
      * במקום לפסול את השאלה כולה, מנקים ומקצצים למה שתקין.
      */
@@ -133,13 +134,13 @@ public class ChatGPTService {
         return new Question(text, options);
     }
 
-    private JSONObject parseJsonObject(String raw) {
+    private JSONObject parseJsonObject(String raw) throws SurveyGenerationException {
         String cleaned = extractJson(raw);
         try {
             return new JSONObject(cleaned);
         } catch (JSONException e) {
-            throw new RuntimeException("התגובה מהשרת לא הייתה JSON תקין. תחילת התגובה שהתקבלה: \""
-                    + snippet(raw) + "\"", e);
+            throw new SurveyGenerationException(
+                    "התגובה מהשרת לא הייתה JSON תקין. תחילת התגובה שהתקבלה: \"" + snippet(raw) + "\"", e);
         }
     }
 
@@ -148,7 +149,6 @@ public class ChatGPTService {
             return "";
         }
         String text = raw.trim();
-
         if (text.startsWith("```")) {
             int firstNewline = text.indexOf('\n');
             if (firstNewline != -1) {
@@ -160,7 +160,6 @@ public class ChatGPTService {
             }
             text = text.trim();
         }
-
         int start = text.indexOf('{');
         int end = text.lastIndexOf('}');
         if (start >= 0 && end > start) {
@@ -174,8 +173,8 @@ public class ChatGPTService {
             return "(תגובה ריקה)";
         }
         String trimmed = text.trim();
-        return trimmed.length() > SNIPPET_LENGTH
-                ? trimmed.substring(0, SNIPPET_LENGTH) + "..."
+        return trimmed.length() > AppConfig.RESPONSE_SNIPPET_LENGTH
+                ? trimmed.substring(0, AppConfig.RESPONSE_SNIPPET_LENGTH) + "..."
                 : trimmed;
     }
 
