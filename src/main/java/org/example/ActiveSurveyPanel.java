@@ -168,7 +168,11 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener
                 JOptionPane.QUESTION_MESSAGE);
         if (answer == JOptionPane.YES_OPTION) {
             stopButton.setEnabled(false);
-            surveyManager.closeSurvey();
+            if (lastPhaseWasPending) {
+                surveyManager.cancelPendingSurvey();
+            } else {
+                surveyManager.closeSurvey();
+            }
         }
     }
 
