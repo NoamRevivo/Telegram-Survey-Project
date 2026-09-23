@@ -231,7 +231,8 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     }
 
     @Override
-    public void onAnswerRecorded(SurveyParticipant participant) {
+    public void onAnswerRecorded(SurveyParticipant participant)
+    {
         SwingUtilities.invokeLater(() -> {
             Integer row = rowByTelegramId.get(participant.getUser().getTelegramId());
             if (row != null) {
@@ -244,7 +245,8 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     }
 
     @Override
-    public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
+    public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants)
+    {
         SwingUtilities.invokeLater(() -> {
             closedSurveyId = survey.getId();
             pendingPhase = false;
@@ -255,9 +257,11 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
             stopButton.setEnabled(false);
             phaseInitialized = false;
 
-            for (SurveyParticipant p : participants) {
+            for (SurveyParticipant p : participants)
+            {
                 Integer row = rowByTelegramId.get(p.getUser().getTelegramId());
-                if (row != null && !p.isCompleted()) {
+                if (row != null && !p.isCompleted())
+                {
                     tableModel.setValueAt(STATUS_MISSED, row, 2);
                 }
             }
@@ -267,7 +271,8 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     }
 
     @Override
-    public void onSurveyCancelled(Survey survey) {
+    public void onSurveyCancelled(Survey survey)
+    {
         SwingUtilities.invokeLater(() -> {
             closedSurveyId = survey.getId();
             pendingPhase = false;
@@ -280,15 +285,18 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         });
     }
 
-    private String statusLabelFor(SurveyParticipant participant) {
-        if (participant.isCompleted()) {
+    private String statusLabelFor(SurveyParticipant participant)
+    {
+        if (participant.isCompleted())
+        {
             return STATUS_COMPLETED;
         }
         return participant.getAnsweredQuestionsCount() > 0 ? STATUS_IN_PROGRESS : STATUS_WAITING;
     }
 
     private void refreshStats() {
-        if (currentParticipants == null) {
+        if (currentParticipants == null)
+        {
             return;
         }
         long finished = currentParticipants.stream().filter(SurveyParticipant::isCompleted).count();
@@ -297,22 +305,31 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         pendingLabel.setText("⏳ טרם סיימו: " + (currentParticipants.size() - finished));
     }
 
-    private static class StatusRowRenderer extends DefaultTableCellRenderer {
+    private static class StatusRowRenderer extends DefaultTableCellRenderer
+    {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
-                                                       boolean hasFocus, int row, int column) {
+                                                       boolean hasFocus, int row, int column)
+        {
             Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             Object status = table.getModel().getValueAt(table.convertRowIndexToModel(row), 2);
-            if (STATUS_COMPLETED.equals(status)) {
+            if (STATUS_COMPLETED.equals(status))
+            {
                 c.setBackground(UiTheme.ROW_COMPLETED);
-            } else if (STATUS_IN_PROGRESS.equals(status)) {
+            }
+            else if (STATUS_IN_PROGRESS.equals(status))
+            {
                 c.setBackground(UiTheme.ROW_IN_PROGRESS);
-            } else if (STATUS_MISSED.equals(status)) {
+            }
+            else if (STATUS_MISSED.equals(status))
+            {
                 c.setBackground(UiTheme.ROW_MISSED);
-            } else {
+            } else
+            {
                 c.setBackground(UiTheme.ROW_WAITING);
             }
-            if (isSelected) {
+            if (isSelected)
+            {
                 c.setBackground(c.getBackground().darker());
             }
             return c;

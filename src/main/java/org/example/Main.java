@@ -15,7 +15,6 @@ import java.util.logging.Logger;
 public class Main {
 
     private static final Logger LOG = Logger.getLogger(Main.class.getName());
-    private static final boolean SEED_FAKE_MEMBERS_FOR_TESTING = true;
 
     public static void main(String[] args) {
         Thread.setDefaultUncaughtExceptionHandler(
@@ -29,13 +28,6 @@ public class Main {
             return;
         }
         CommunityManager communityManager = new CommunityManager();
-        if (SEED_FAKE_MEMBERS_FOR_TESTING)
-        {
-            communityManager.addMember(-900000001L, "דני (פיקטיבי)", "danny_test");
-            communityManager.addMember(-900000002L, "מיכל (פיקטיבית)", "michal_test");
-            LOG.warning("SEED_FAKE_MEMBERS_FOR_TESTING=true — נוספו 3 חברים פיקטיביים. "
-                    + "לא לשכוח להחזיר ל-false לפני ההגשה!");
-        }
         SurveyManager surveyManager = new SurveyManager(communityManager);
         ChatGPTService chatGPTService = new ChatGPTService(
                 AppConfig.env(AppConfig.ENV_SURVEY_API_TOKEN),
@@ -77,7 +69,7 @@ public class Main {
         }, "shutdown-hook"));
     }
 
-        private static void applyLookAndFeel() {
+    private static void applyLookAndFeel() {
         try {
             UIManager.put("Component.accentColor", UiTheme.BRAND_BLUE);
             UIManager.put("Button.arc", 14);
@@ -90,7 +82,7 @@ public class Main {
         }
     }
 
-        private static void showFatal(String message) {
+    private static void showFatal(String message) {
         try {
             SwingUtilities.invokeAndWait(() ->
                     JOptionPane.showMessageDialog(null, message, "שגיאה בהפעלה", JOptionPane.ERROR_MESSAGE));
