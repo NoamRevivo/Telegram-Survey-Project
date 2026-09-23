@@ -43,7 +43,7 @@
             <version>3.5.4</version>
         </dependency>
 
-        <!-- R5-M12: בדיקות יחידה -->
+        <!-- בדיקות יחידה -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -64,7 +64,7 @@
                 </configuration>
             </plugin>
 
-            <!-- R5-M12: הרצת הבדיקות כחלק מ-mvn test / mvn package -->
+            <!-- הרצת הבדיקות כחלק מ-mvn test / mvn package -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -76,7 +76,7 @@
                 </configuration>
             </plugin>
 
-            <!-- R5-M12: jar יחיד להרצה ולהגשה -->
+            <!-- jar יחיד להרצה ולהגשה -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -105,6 +105,10 @@
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
                                         <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
+                                        <exclude>META-INF/LICENSE*</exclude>
+                                        <exclude>META-INF/NOTICE*</exclude>
+                                        <exclude>META-INF/DEPENDENCIES</exclude>
                                     </excludes>
                                 </filter>
                             </filters>
