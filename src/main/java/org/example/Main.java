@@ -84,7 +84,7 @@ public class Main {
     private static void showFatal(String message) {
         try {
             SwingUtilities.invokeAndWait(() ->
-                    JOptionPane.showMessageDialog(null, message, "שגיאה בהפעלה ", JOptionPane.ERROR_MESSAGE));
+                    JOptionPane.showMessageDialog(null, message, "שגיאה בהפעלה", JOptionPane.ERROR_MESSAGE));
         } catch (Exception e) {
             LOG.log(Level.SEVERE, message, e);
         }
