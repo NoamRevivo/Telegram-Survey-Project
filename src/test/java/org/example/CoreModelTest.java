@@ -13,7 +13,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CoreModelTest {
-
     @Test
     void questionTrimsTextAndOptions() {
         Question question = new Question("  מה דעתך?  ", List.of("  כן ", "לא  "));
@@ -72,7 +71,7 @@ class CoreModelTest {
     }
 
     /**
-     * R5-M01: מאזין שזורק חריגה אינו מפיל את שאר המאזינים.
+     * מאזין שזורק חריגה אינו מפיל את שאר המאזינים.
      * הלוגר מושתק לרגע — החריגה כאן מכוונת, ואין טעם להציף את פלט הבדיקות בעקבות מחסנית.
      */
     @Test

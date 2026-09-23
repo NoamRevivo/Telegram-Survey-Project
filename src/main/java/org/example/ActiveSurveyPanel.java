@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 
 public class ActiveSurveyPanel extends JPanel implements SurveyListener {
-
     private static final String CARD_IDLE = "idle";
     private static final String CARD_LIVE = "live";
 
@@ -55,7 +54,6 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     private int totalQuestions;
     private List<SurveyParticipant> currentParticipants;
 
-
     private String closedSurveyId;
     private boolean pendingPhase;
 
@@ -74,7 +72,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         table = UiFactory.readOnlyTable(tableModel);
         table.setDefaultRenderer(Object.class, new StatusRowRenderer());
 
-        cardHolder.add(UiFactory.emptyState(AppIcons.active(48), "אין סקר פעיל כרגע",
+        cardHolder.add(UiFactory.emptyState(AppIcons.active(UiTheme.ICON_EMPTY_STATE), "אין סקר פעיל כרגע",
                 "עברו ללשונית «יצירת סקר» כדי לבנות שאלות ולשלוח אותן לקהילה."), CARD_IDLE);
         cardHolder.add(buildLiveCard(), CARD_LIVE);
         add(cardHolder, BorderLayout.CENTER);
@@ -161,7 +159,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
 
             String mmss = String.format("%02d:%02d", secondsRemaining / 60, secondsRemaining % 60);
             boolean lastSeconds = !isPendingPhase
-                    && secondsRemaining <= AppConfig.FINAL_WARNING_SECONDS_BEFORE_END;
+                    && secondsRemaining <= AppConfig.URGENT_SECONDS_BEFORE_END;
 
             countdownLabel.setText(isPendingPhase
                     ? "⏳ הסקר יישלח בעוד: " + mmss
@@ -220,7 +218,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
             }
             stopButton.setEnabled(true);
             stopButton.setText("⏹ סיים סקר עכשיו");
-            // R5-M15: השעון מתחיל רק כשההפצה מסתיימת — עד אז אומרים את זה במפורש
+            // השעון מתחיל רק כשההפצה מסתיימת — עד אז אומרים את זה במפורש
             countdownLabel.setText("📤 שולח את השאלות…");
             countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
             phaseNoteLabel.setText("השאלות נשלחות למשתתפים — הספירה תתחיל כשכולם יקבלו אותן");
@@ -231,8 +229,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     }
 
     @Override
-    public void onAnswerRecorded(SurveyParticipant participant)
-    {
+    public void onAnswerRecorded(SurveyParticipant participant) {
         SwingUtilities.invokeLater(() -> {
             Integer row = rowByTelegramId.get(participant.getUser().getTelegramId());
             if (row != null) {
@@ -245,8 +242,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     }
 
     @Override
-    public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants)
-    {
+    public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
         SwingUtilities.invokeLater(() -> {
             closedSurveyId = survey.getId();
             pendingPhase = false;
@@ -257,11 +253,9 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
             stopButton.setEnabled(false);
             phaseInitialized = false;
 
-            for (SurveyParticipant p : participants)
-            {
+            for (SurveyParticipant p : participants) {
                 Integer row = rowByTelegramId.get(p.getUser().getTelegramId());
-                if (row != null && !p.isCompleted())
-                {
+                if (row != null && !p.isCompleted()) {
                     tableModel.setValueAt(STATUS_MISSED, row, 2);
                 }
             }
@@ -271,8 +265,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     }
 
     @Override
-    public void onSurveyCancelled(Survey survey)
-    {
+    public void onSurveyCancelled(Survey survey) {
         SwingUtilities.invokeLater(() -> {
             closedSurveyId = survey.getId();
             pendingPhase = false;
@@ -285,18 +278,15 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         });
     }
 
-    private String statusLabelFor(SurveyParticipant participant)
-    {
-        if (participant.isCompleted())
-        {
+    private String statusLabelFor(SurveyParticipant participant) {
+        if (participant.isCompleted()) {
             return STATUS_COMPLETED;
         }
         return participant.getAnsweredQuestionsCount() > 0 ? STATUS_IN_PROGRESS : STATUS_WAITING;
     }
 
     private void refreshStats() {
-        if (currentParticipants == null)
-        {
+        if (currentParticipants == null) {
             return;
         }
         long finished = currentParticipants.stream().filter(SurveyParticipant::isCompleted).count();
@@ -305,31 +295,22 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         pendingLabel.setText("⏳ טרם סיימו: " + (currentParticipants.size() - finished));
     }
 
-    private static class StatusRowRenderer extends DefaultTableCellRenderer
-    {
+    private static class StatusRowRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
-                                                       boolean hasFocus, int row, int column)
-        {
+                                                       boolean hasFocus, int row, int column) {
             Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             Object status = table.getModel().getValueAt(table.convertRowIndexToModel(row), 2);
-            if (STATUS_COMPLETED.equals(status))
-            {
+            if (STATUS_COMPLETED.equals(status)) {
                 c.setBackground(UiTheme.ROW_COMPLETED);
-            }
-            else if (STATUS_IN_PROGRESS.equals(status))
-            {
+            } else if (STATUS_IN_PROGRESS.equals(status)) {
                 c.setBackground(UiTheme.ROW_IN_PROGRESS);
-            }
-            else if (STATUS_MISSED.equals(status))
-            {
+            } else if (STATUS_MISSED.equals(status)) {
                 c.setBackground(UiTheme.ROW_MISSED);
-            } else
-            {
+            } else {
                 c.setBackground(UiTheme.ROW_WAITING);
             }
-            if (isSelected)
-            {
+            if (isSelected) {
                 c.setBackground(c.getBackground().darker());
             }
             return c;

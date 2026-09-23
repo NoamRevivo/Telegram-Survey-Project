@@ -10,7 +10,6 @@ import java.util.logging.Logger;
  * סיום יצירת שאלות ב-ChatGPT, והתחלת סקר.
  */
 public class Toast extends JWindow {
-
     public enum Type {
         SUCCESS(UiTheme.SUCCESS_GREEN),
         INFO(UiTheme.BRAND_DARK_BLUE),
@@ -26,9 +25,16 @@ public class Toast extends JWindow {
     private static final int WIDTH = 400;
     private static final int HEIGHT = 58;
     private static final int VISIBLE_MILLIS = 2600;
+    private static final int CORNER_ARC = 24;
+    private static final int BOTTOM_MARGIN = 50;
+    private static final int STACK_GAP = 8;
+    private static final int RISE_STEPS = 12;
+    private static final int RISE_FRAME_MILLIS = 15;
+    private static final int FADE_STEPS = 10;
+    private static final int FADE_FRAME_MILLIS = 20;
 
     private boolean opacitySupported = true;
-    /** R5-L07: האם הבועה הזו נספרה — כדי שהמונה יירד בדיוק פעם אחת */
+    /** האם הבועה הזו נספרה — כדי שהמונה יירד בדיוק פעם אחת */
     private boolean counted;
     /** כמה בועות מוצגות כרגע, כדי שבועה חדשה תופיע מעל הקודמת (EDT בלבד) */
     private static int visibleCount = 0;
@@ -52,7 +58,7 @@ public class Toast extends JWindow {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(bubbleColor);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 24, 24);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), CORNER_ARC, CORNER_ARC);
                 g2.dispose();
             }
         };
@@ -86,7 +92,7 @@ public class Toast extends JWindow {
         }
         Rectangle ownerBounds = owner.getBounds();
         int targetX = ownerBounds.x + (ownerBounds.width - WIDTH) / 2;
-        int targetY = ownerBounds.y + ownerBounds.height - HEIGHT - 50 - visibleCount * (HEIGHT + 8);
+        int targetY = ownerBounds.y + ownerBounds.height - HEIGHT - BOTTOM_MARGIN - visibleCount * (HEIGHT + STACK_GAP);
         visibleCount++;
         counted = true;
         int startY = ownerBounds.y + ownerBounds.height;
@@ -95,9 +101,9 @@ public class Toast extends JWindow {
         trySetOpacity(0f);
         setVisible(true);
 
-        int steps = 12;
+        int steps = RISE_STEPS;
         int[] step = {0};
-        Timer riseTimer = new Timer(15, null);
+        Timer riseTimer = new Timer(RISE_FRAME_MILLIS, null);
         riseTimer.addActionListener(e -> {
             step[0]++;
             float progress = Math.min(1f, step[0] / (float) steps);
@@ -123,9 +129,9 @@ public class Toast extends JWindow {
             dispose();
             return;
         }
-        int steps = 10;
+        int steps = FADE_STEPS;
         int[] step = {0};
-        Timer fadeTimer = new Timer(20, null);
+        Timer fadeTimer = new Timer(FADE_FRAME_MILLIS, null);
         fadeTimer.addActionListener(e -> {
             step[0]++;
             float opacity = Math.max(0f, 1f - step[0] / (float) steps);
@@ -139,7 +145,7 @@ public class Toast extends JWindow {
     }
 
     /**
-     * R5-L07: המונה יורד כאן ולא בתוך הטיימר —
+     * המונה יורד כאן ולא בתוך הטיימר —
      * בועה שנסגרה בדרך אחרת (סגירת חלון האב, dispose חיצוני) לא משאירה את המונה תקוע גבוה.
      */
     @Override

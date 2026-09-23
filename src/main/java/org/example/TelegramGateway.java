@@ -17,11 +17,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * R5-M08: שכבת התעבורה מול טלגרם בלבד — שליחה, retry, תורי עבודה וכיבוי מסודר.
+ * שכבת התעבורה מול טלגרם בלבד — שליחה, retry, תורי עבודה וכיבוי מסודר.
  * היא אינה יודעת דבר על סקרים, קהילה או ניסוחים.
  */
 public class TelegramGateway extends TelegramLongPollingBot {
-
     /** מי שמטפל בעדכונים הנכנסים — הפרדה בין התעבורה לבין הלוגיקה. */
     public interface UpdateHandler {
         void onMessage(Message message);
@@ -56,7 +55,7 @@ public class TelegramGateway extends TelegramLongPollingBot {
         return botToken;
     }
 
-    /** R5-C05: עדכון פגום לא מפיל את חוט ה-polling של הספרייה. */
+    /** עדכון פגום לא מפיל את חוט ה-polling של הספרייה. */
     @Override
     public void onUpdateReceived(Update update) {
         try {
@@ -70,17 +69,22 @@ public class TelegramGateway extends TelegramLongPollingBot {
         }
     }
 
-    public void sendText(long chatId, String text) {
+    public boolean sendText(long chatId, String text) {
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
         message.setText(text);
-        send(message);
+        return send(message);
     }
 
-    /** שליחה עם ניסיון חוזר אחד כשטלגרם מחזיר 429 עם retryAfter. */
-    public void send(BotApiMethod<?> method) {
+    /**
+     * שליחה עם ניסיון חוזר אחד כשטלגרם מחזיר 429 עם retryAfter.
+     *
+     * @return האם ההודעה נמסרה — הקורא מחליט מה לעשות בכישלון
+     */
+    public boolean send(BotApiMethod<?> method) {
         try {
             execute(method);
+            return true;
         } catch (TelegramApiRequestException e) {
             Integer retryAfter = e.getParameters() != null ? e.getParameters().getRetryAfter() : null;
             if (retryAfter != null && retryAfter > 0) {
@@ -88,6 +92,7 @@ public class TelegramGateway extends TelegramLongPollingBot {
                 sleepMillis(retryAfter * 1000L);
                 try {
                     execute(method);
+                    return true;
                 } catch (TelegramApiException retryEx) {
                     LOG.log(Level.WARNING, "שליחת הודעה נכשלה גם בניסיון החוזר", retryEx);
                 }
@@ -97,6 +102,7 @@ public class TelegramGateway extends TelegramLongPollingBot {
         } catch (TelegramApiException e) {
             LOG.log(Level.WARNING, "שליחת הודעה בטלגרם נכשלה", e);
         }
+        return false;
     }
 
     public void runOnNotificationPool(String description, Runnable task) {
@@ -108,7 +114,7 @@ public class TelegramGateway extends TelegramLongPollingBot {
     }
 
     /**
-     * R5-C04: execute ולא submit.
+     * execute ולא submit.
      * submit קובר כל חריגה בתוך Future שאיש לא קורא — משתתף שלא קיבל את הסקר
      * בגלל NPE היה נראה «טרם ענה» לנצח, בלי שורת לוג אחת.
      */
@@ -135,7 +141,7 @@ public class TelegramGateway extends TelegramLongPollingBot {
     }
 
     /**
-     * R5-M06: shutdownNow קטע את הודעות הסיום באוויר.
+     * shutdownNow קטע את הודעות הסיום באוויר.
      * כאן נותנים להן להסתיים, ורק אז כופים כיבוי.
      */
     public void shutdownGracefully(Duration timeout) {

@@ -5,8 +5,7 @@ import java.awt.*;
 import java.awt.geom.Path2D;
 
 public final class AppIcons {
-
-    /** R5-L01: פנימי — הקוד היחיד שמצייר סמלים נמצא במחלקה הזו */
+    /** פנימי — הקוד היחיד שמצייר סמלים נמצא במחלקה הזו */
     private interface Painter {
         void paint(Graphics2D g, int size);
     }

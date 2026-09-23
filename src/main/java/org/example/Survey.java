@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class Survey {
-
     public static final int MIN_QUESTIONS = 1;
     public static final int MAX_QUESTIONS = 3;
 

@@ -19,7 +19,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class CommunityPanel extends JPanel implements CommunityListener {
-
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final JLabel totalMembersLabel;

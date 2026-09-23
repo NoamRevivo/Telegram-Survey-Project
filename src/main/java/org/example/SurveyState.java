@@ -5,14 +5,13 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * R5-M08: מצב הסקר בלבד — הסקר, משתתפיו והשאילתות עליהם.
+ * מצב הסקר בלבד — הסקר, משתתפיו והשאילתות עליהם.
  * אין כאן תזמון ואין מאזינים; כל הגישה נעשית תחת המנעול של SurveyManager.
  */
 final class SurveyState {
-
     private final Survey survey;
     private final List<SurveyParticipant> participants = new CopyOnWriteArrayList<>();
-    /** R5-C01: מזהה דור — טיק של סקר קודם מזוהה ונזרק */
+    /** מזהה דור — טיק של סקר קודם מזוהה ונזרק */
     private final long generation;
     private boolean remindersSent;
     private boolean timersStarted;
@@ -38,7 +37,7 @@ final class SurveyState {
         survey.setStatus(status);
     }
 
-    /** R5-C02 / דרישה 5: המשתתפים נקבעים ברגע שהסקר יוצא בפועל. */
+    /** המשתתפים נקבעים ברגע שהסקר יוצא בפועל. */
     void seed(List<CommunityUser> members) {
         participants.clear();
         for (CommunityUser user : members) {
@@ -55,31 +54,41 @@ final class SurveyState {
         return null;
     }
 
+    /** כולם סיימו — משתתף שלא ניתן להשיג אינו נספר, כי לא יכול לסיים. */
     boolean allCompleted() {
         for (SurveyParticipant p : participants) {
-            if (p.getStatus() != ParticipantStatus.COMPLETED) {
+            if (!p.isUnreachable() && p.getStatus() != ParticipantStatus.COMPLETED) {
                 return false;
             }
         }
         return true;
     }
 
+    boolean anyCompleted() {
+        for (SurveyParticipant p : participants) {
+            if (p.getStatus() == ParticipantStatus.COMPLETED) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     List<SurveyParticipant> notCompleted() {
         List<SurveyParticipant> pending = new ArrayList<>();
         for (SurveyParticipant p : participants) {
-            if (p.getStatus() != ParticipantStatus.COMPLETED) {
+            if (!p.isUnreachable() && p.getStatus() != ParticipantStatus.COMPLETED) {
                 pending.add(p);
             }
         }
         return pending;
     }
 
-    /** R5-M01: התצלום שנמסר למאזינים — מחוץ למנעול הם עובדים על עותק. */
+    /** התצלום שנמסר למאזינים — מחוץ למנעול הם עובדים על עותק. */
     List<SurveyParticipant> snapshot() {
         return new ArrayList<>(participants);
     }
 
-    /** R6-C01: תזכורת יחידה בלבד לכל סקר — מונע כפל תזכורות לאותו משתתף. */
+    /** תזכורת יחידה בלבד לכל סקר — מונע כפל תזכורות לאותו משתתף. */
     boolean markRemindersSent() {
         if (remindersSent) {
             return false;
@@ -88,7 +97,7 @@ final class SurveyState {
         return true;
     }
 
-    /** R5-M15: השעון מופעל פעם אחת בלבד, אחרי שההפצה הסתיימה. */
+    /** השעון מופעל פעם אחת בלבד, אחרי שההפצה הסתיימה. */
     boolean markTimersStarted() {
         if (timersStarted) {
             return false;

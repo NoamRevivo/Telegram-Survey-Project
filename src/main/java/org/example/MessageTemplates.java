@@ -7,10 +7,9 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * R5-M08: כל הטקסטים של המערכת במקום אחד — הבוט מטפל בתעבורה, לא בניסוח.
+ * כל הטקסטים של המערכת במקום אחד — הבוט מטפל בתעבורה, לא בניסוח.
  */
 public final class MessageTemplates {
-
     private static final String[] ALREADY_MEMBER_TEMPLATES = {
             "%s, את/ה כבר איתנו! הצטרפת %s - אין צורך להצטרף שוב 😉",
             "רגע, אני מכיר אותך! %s, כבר חבר/ה בקהילה מאז %s 🎉",
@@ -22,10 +21,10 @@ public final class MessageTemplates {
     }
 
     public static String welcome(String displayName) {
-        return "ברוך הבא לקהילה, " + displayName + "!";
+        return "ברוכ/ה הבא/ה לקהילה, " + displayName + "!";
     }
 
-    /** R5-L05: ThreadLocalRandom במקום Random משותף לכל חוטי הבוט. */
+    /** בוחר ניסוח אקראי; ThreadLocalRandom במקום Random משותף לכל חוטי הבוט. */
     public static String alreadyMember(String displayName, LocalDateTime joinedAt) {
         String since = joinedAt == null ? "כבר" : timeSinceJoined(joinedAt);
         String template = ALREADY_MEMBER_TEMPLATES[

@@ -13,11 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * R5-M12: שלושה מחמשת הממצאים הקריטיים בדוח היו נתפסים בבדיקה אחת כל אחד.
- */
+/** לוגיקת הסקר מקצה לקצה על שעון וירטואלי: תזכורת, סגירה, הפצה ומשתתפים שלא ניתן להשיג. */
 class SurveyManagerTest {
-
     private CommunityManager communityManager;
     private TestScheduler scheduler;
     private SurveyManager manager;
@@ -43,7 +40,7 @@ class SurveyManagerTest {
     /** מדמה את מה שהבוט עושה: מפיץ את השאלות ואז מדווח שסיים. */
     private void startImmediateSurvey() {
         manager.createSurvey(oneQuestion(), 0);
-        manager.markDistributionComplete();
+        manager.markDistributionComplete(manager.getCurrentSurvey().getId());
     }
 
     private String firstQuestionId() {
@@ -78,7 +75,7 @@ class SurveyManagerTest {
         assertEquals(1, listener.closedCount, "הסקר אמור להיסגר בדיוק פעם אחת");
     }
 
-    /** R5-C01: טיק שהיה באוויר בזמן הסגירה לא נמסר אחריה. */
+    /** טיק שהיה באוויר בזמן הסגירה לא נמסר אחריה. */
     @Test
     void noTickIsDeliveredAfterSurveyClosed() {
         startImmediateSurvey();
@@ -101,8 +98,8 @@ class SurveyManagerTest {
 
         scheduler.advance(Duration.ofSeconds(AppConfig.REMINDER_DELAY_SECONDS));
 
-        assertEquals(List.of("mid"), listener.reminderRounds);
-        assertEquals(Set.of(2L, 3L), listener.remindedIds);
+        assertEquals(1, listener.reminderRoundsCount);
+        assertEquals(Set.of(2L, 3L), Set.copyOf(listener.remindedIds));
     }
 
     @Test
@@ -110,22 +107,22 @@ class SurveyManagerTest {
         startImmediateSurvey();
         scheduler.advance(Duration.ofSeconds(AppConfig.REMINDER_DELAY_SECONDS + 30));
 
-        assertEquals(1, listener.reminderRounds.stream().filter("mid"::equals).count());
+        assertEquals(1, listener.reminderRoundsCount);
     }
 
-    /** R5-M15: השעון מתחיל רק אחרי שההפצה דיווחה שהסתיימה. */
+    /** השעון מתחיל רק אחרי שההפצה דיווחה שהסתיימה. */
     @Test
     void clockStartsOnlyAfterDistributionCompletes() {
         manager.createSurvey(oneQuestion(), 0);
         scheduler.advance(Duration.ofSeconds(5));
         assertEquals(0, listener.totalTicks, "לפני סיום ההפצה אין ספירה לאחור");
 
-        manager.markDistributionComplete();
+        manager.markDistributionComplete(manager.getCurrentSurvey().getId());
         scheduler.advance(Duration.ofSeconds(5));
         assertTrue(listener.totalTicks > 0);
     }
 
-    /** R5-M15: גם אם ההפצה לא דיווחה, רשת הביטחון מפעילה את השעון. */
+    /** גם אם ההפצה לא דיווחה, רשת הביטחון מפעילה את השעון. */
     @Test
     void watchdogStartsClockWhenDistributionNeverReports() {
         manager.createSurvey(oneQuestion(), 0);
@@ -143,7 +140,7 @@ class SurveyManagerTest {
         assertEquals(1, listener.closedCount);
     }
 
-    /** R5-M13: ביטול בשלב ההמתנה אינו "סקר שהסתיים". */
+    /** ביטול בשלב ההמתנה אינו "סקר שהסתיים". */
     @Test
     void cancellingPendingSurveyIsNotAClose() {
         manager.createSurvey(oneQuestion(), 5);
@@ -179,5 +176,79 @@ class SurveyManagerTest {
         SurveyManager smallManager = new SurveyManager(small, new TestScheduler());
 
         assertThrows(IllegalStateException.class, () -> smallManager.createSurvey(oneQuestion(), 0));
+    }
+
+    @Test
+    void noReminderBeforeThreeMinutes() {
+        startImmediateSurvey();
+        scheduler.advance(Duration.ofSeconds(AppConfig.REMINDER_DELAY_SECONDS - 1));
+        assertEquals(0, listener.reminderRoundsCount);
+    }
+
+    @Test
+    void reminderIsNeverSentTwiceToTheSameParticipant() {
+        startImmediateSurvey();
+        scheduler.advance(Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS - 1));
+        assertEquals(1, listener.reminderRoundsCount);
+        assertEquals(List.of(1L, 2L, 3L), listener.remindedIds);
+    }
+
+    @Test
+    void staleDistributionReportDoesNotStartTheNextSurveyClock() {
+        manager.createSurvey(oneQuestion(), 0);
+        String firstId = manager.getCurrentSurvey().getId();
+        manager.closeSurvey();
+
+        manager.createSurvey(oneQuestion(), 0);
+        manager.markDistributionComplete(firstId);
+        scheduler.advance(Duration.ofSeconds(5));
+        assertEquals(0, listener.totalTicks, "דיווח של הסקר הקודם אינו מפעיל את השעון של הנוכחי");
+
+        manager.markDistributionComplete(manager.getCurrentSurvey().getId());
+        scheduler.advance(Duration.ofSeconds(5));
+        assertTrue(listener.totalTicks > 0);
+    }
+
+    @Test
+    void distributionStopsWhenSurveyIsClosed() {
+        startImmediateSurvey();
+        String id = manager.getCurrentSurvey().getId();
+        assertTrue(manager.isActive(id));
+
+        manager.closeSurvey();
+        assertFalse(manager.isActive(id));
+    }
+
+    @Test
+    void unreachableParticipantDoesNotBlockEarlyClose() {
+        startImmediateSurvey();
+        String questionId = firstQuestionId();
+        String id = manager.getCurrentSurvey().getId();
+
+        manager.recordAnswer(1L, questionId, "בוקר");
+        manager.recordAnswer(2L, questionId, "ערב");
+        assertTrue(manager.isSurveyInProgress());
+
+        manager.markUnreachable(id, 3L);
+
+        assertFalse(manager.isSurveyInProgress());
+        assertEquals(1, listener.closedCount);
+    }
+
+    @Test
+    void unreachableParticipantGetsNoReminder() {
+        startImmediateSurvey();
+        manager.markUnreachable(manager.getCurrentSurvey().getId(), 3L);
+
+        scheduler.advance(Duration.ofSeconds(AppConfig.REMINDER_DELAY_SECONDS));
+
+        assertEquals(Set.of(1L, 2L), Set.copyOf(listener.remindedIds));
+    }
+
+    @Test
+    void countdownIsDerivedFromTheDeadline() {
+        startImmediateSurvey();
+        scheduler.advance(Duration.ofSeconds(60));
+        assertEquals(AppConfig.SURVEY_DURATION_SECONDS - 60, listener.lastSecondsRemaining);
     }
 }

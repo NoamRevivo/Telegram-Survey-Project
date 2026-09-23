@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class CommunityManager {
-
     private final Map<Long, CommunityUser> members = new ConcurrentHashMap<>();
     private final Listeners<CommunityListener> listeners = new Listeners<>();
 
@@ -15,12 +14,12 @@ public class CommunityManager {
         listeners.add(listener);
     }
 
-    /** R5-M16: נקרא מ-MainFrame.dispose() — חלון שנסגר מפסיק לקבל אירועים. */
+    /** נקרא מ-MainFrame.dispose() — חלון שנסגר מפסיק לקבל אירועים. */
     public void removeListener(CommunityListener listener) {
         listeners.remove(listener);
     }
 
-    /** R5-M01: ההודעה למאזינים יוצאת מחוץ למנעול (copy-then-notify). */
+    /** ההודעה למאזינים יוצאת מחוץ למנעול (copy-then-notify). */
     public boolean addMember(long telegramId, String firstName, String username) {
         CommunityUser user = new CommunityUser(telegramId, firstName, username);
         CommunityUser existing = members.putIfAbsent(telegramId, user);
@@ -33,7 +32,7 @@ public class CommunityManager {
     }
 
     /**
-     * R5-M17: סדר הצטרפות יציב — ConcurrentHashMap.values() מחזיר סדר hash שרירותי,
+     * סדר הצטרפות יציב — ConcurrentHashMap.values() מחזיר סדר hash שרירותי,
      * וכך אותה קהילה הוצגה בשני סדרים שונים בשתי לשוניות.
      */
     public List<CommunityUser> getAllMembers() {

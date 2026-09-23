@@ -10,11 +10,10 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * R5-M08: הצד היוצא של הבוט — מתרגם אירועים של המנהלים להודעות בטלגרם.
+ * הצד היוצא של הבוט — מתרגם אירועים של המנהלים להודעות בטלגרם.
  * הטקסטים מגיעים מ-{@link MessageTemplates} והשליחה מ-{@link TelegramGateway}.
  */
 public class BotNotifier implements CommunityListener, SurveyListener {
-
     private final TelegramGateway gateway;
     private final CommunityManager communityManager;
     private final SurveyManager surveyManager;
@@ -44,13 +43,14 @@ public class BotNotifier implements CommunityListener, SurveyListener {
     }
 
     /**
-     * R5-M15: כל משתתף במשימה נפרדת, והאחרונה שמסתיימת מדווחת למנהל
+     * כל משתתף במשימה נפרדת, והאחרונה שמסתיימת מדווחת למנהל
      * שההפצה הושלמה — רק אז מתחילות 5 הדקות.
      */
     @Override
     public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
+        String surveyId = survey.getId();
         if (participants.isEmpty()) {
-            surveyManager.markDistributionComplete();
+            surveyManager.markDistributionComplete(surveyId);
             return;
         }
         AtomicInteger remaining = new AtomicInteger(participants.size());
@@ -58,33 +58,47 @@ public class BotNotifier implements CommunityListener, SurveyListener {
             long chatId = participant.getUser().getTelegramId();
             gateway.runOnNotificationPool("שליחת סקר ל-" + chatId, () -> {
                 try {
-                    sendSurveyTo(chatId, survey);
+                    if (!sendSurveyTo(chatId, survey)) {
+                        surveyManager.markUnreachable(surveyId, chatId);
+                    }
                 } finally {
                     if (remaining.decrementAndGet() == 0) {
-                        surveyManager.markDistributionComplete();
+                        surveyManager.markDistributionComplete(surveyId);
                     }
                 }
             });
         }
     }
 
-    private void sendSurveyTo(long chatId, Survey survey) {
+    /** @return true אם כל ההודעות נמסרו; מפסיק לשלוח ברגע שהסקר נסגר. */
+    private boolean sendSurveyTo(long chatId, Survey survey) {
+        if (!surveyManager.isActive(survey.getId())) {
+            return true;
+        }
         List<Question> questions = survey.getQuestions();
-        gateway.sendText(chatId, MessageTemplates.surveyIntro(questions.size()));
+        if (!gateway.sendText(chatId, MessageTemplates.surveyIntro(questions.size()))) {
+            return false;
+        }
         gateway.sleepMillis(AppConfig.INTRO_DELAY_MILLIS);
         for (int index = 0; index < questions.size(); index++) {
-            sendQuestion(chatId, survey.getId(), questions.get(index), index, questions.size());
+            if (!surveyManager.isActive(survey.getId())) {
+                return true;
+            }
+            if (!sendQuestion(chatId, survey.getId(), questions.get(index), index, questions.size())) {
+                return false;
+            }
             gateway.sleepMillis(AppConfig.QUESTION_DELAY_MILLIS);
         }
+        return true;
     }
 
-    private void sendQuestion(long chatId, String surveyId, Question question,
-                              int questionIndex, int totalQuestions) {
+    private boolean sendQuestion(long chatId, String surveyId, Question question,
+                                 int questionIndex, int totalQuestions) {
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
         message.setText(MessageTemplates.questionHeader(questionIndex, totalQuestions) + question.getText());
         message.setReplyMarkup(buildKeyboardFor(surveyId, question, questionIndex));
-        gateway.send(message);
+        return gateway.send(message);
     }
 
     private InlineKeyboardMarkup buildKeyboardFor(String surveyId, Question question, int questionIndex) {

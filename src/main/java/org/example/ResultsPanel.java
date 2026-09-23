@@ -26,11 +26,10 @@ import java.util.Map;
 /**
  * התוצאות מתעדכנות בזמן אמת תוך כדי הסקר.
  * <p>
- * R5-C03: בזמן הסקר הסדר קבוע כדי שהשורות לא יקפצו בכל תשובה נכנסת,
+ * בזמן הסקר הסדר קבוע כדי שהשורות לא יקפצו בכל תשובה נכנסת,
  * וברגע הסגירה הן ממוינות לפי שכיחות בסדר יורד — כנדרש בדרישה 6.
  */
 public class ResultsPanel extends JPanel implements SurveyListener {
-
     private static final String CARD_EMPTY = "empty";
     private static final String CARD_RESULTS = "results";
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
@@ -49,7 +48,7 @@ public class ResultsPanel extends JPanel implements SurveyListener {
 
     public ResultsPanel() {
         setLayout(new BorderLayout());
-        cardHolder.add(UiFactory.emptyState(AppIcons.results(48), "אין תוצאות להצגה עדיין",
+        cardHolder.add(UiFactory.emptyState(AppIcons.results(UiTheme.ICON_EMPTY_STATE), "אין תוצאות להצגה עדיין",
                 "ברגע שיתחיל סקר, התוצאות יופיעו כאן ויתעדכנו בזמן אמת."), CARD_EMPTY);
         cardHolder.add(buildResultsCard(), CARD_RESULTS);
         add(cardHolder, BorderLayout.CENTER);
@@ -117,7 +116,7 @@ public class ResultsPanel extends JPanel implements SurveyListener {
         });
     }
 
-    /** R5-M13: סקר שבוטל לפני השליחה אינו מציג לשונית תוצאות ריקה. */
+    /** סקר שבוטל לפני השליחה אינו מציג לשונית תוצאות ריקה. */
     @Override
     public void onSurveyCancelled(Survey survey) {
         SwingUtilities.invokeLater(() -> {
@@ -153,7 +152,7 @@ public class ResultsPanel extends JPanel implements SurveyListener {
         summaryLabel.setText(buildSummaryText());
 
         for (QuestionView view : questionViews) {
-            // R5-C03: מיון לפי שכיחות רק בתוצאות הסופיות — בזמן הסקר הסדר יציב
+            // מיון לפי שכיחות רק בתוצאות הסופיות — בזמן הסקר הסדר יציב
             view.refresh(participants, surveyClosed);
         }
     }
@@ -176,14 +175,13 @@ public class ResultsPanel extends JPanel implements SurveyListener {
 
     /** מחזיק את הרכיבים של שאלה אחת כדי לעדכן ערכים בלי לבנות מחדש ובלי הבהובים */
     private static class QuestionView {
-
         private final Question question;
         private final int questionNumber;
         private final JLabel header = new JLabel();
         private final JPanel panel = new JPanel();
         private final Map<String, JProgressBar> barsByOption = new LinkedHashMap<>();
         private final Map<String, JLabel> labelsByOption = new LinkedHashMap<>();
-        /** R5-C03: שורת האפשרות כרכיב אחד — כך אפשר למיין בלי לבנות מחדש */
+        /** שורת האפשרות כרכיב אחד — כך אפשר למיין בלי לבנות מחדש */
         private final Map<String, JComponent> rowsByOption = new LinkedHashMap<>();
 
         private QuestionView(int questionNumber, Question question) {
@@ -215,7 +213,7 @@ public class ResultsPanel extends JPanel implements SurveyListener {
                 row.add(optionLabel, BorderLayout.WEST);
                 row.add(bar, BorderLayout.CENTER);
                 row.setAlignmentX(Component.LEFT_ALIGNMENT);
-                // R5-C03: הרווח בין השורות הוא חלק מהשורה עצמה, לא Strut נפרד שיישאר מאחור בעת מיון
+                // הרווח בין השורות הוא חלק מהשורה עצמה, לא Strut נפרד שיישאר מאחור בעת מיון
                 row.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
 
                 panel.add(row);
@@ -269,7 +267,7 @@ public class ResultsPanel extends JPanel implements SurveyListener {
             return counts;
         }
 
-        /** R5-C03: ממיין את שורות האפשרויות לפי מספר הקולות בסדר יורד (שובר שוויון: סדר המקור). */
+        /** ממיין את שורות האפשרויות לפי מספר הקולות בסדר יורד (שובר שוויון: סדר המקור). */
         private void reorderRows(Map<String, Integer> counts) {
             List<String> ordered = new ArrayList<>(counts.keySet());
             ordered.sort(Comparator.comparingInt((String option) -> counts.get(option)).reversed());

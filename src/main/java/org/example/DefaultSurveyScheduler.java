@@ -9,11 +9,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * R5-M08: המימוש האמיתי מעל ScheduledExecutorService.
- * R5-C04: כל משימה עטופה ב-try/catch — חריגה בטיק אינה מבטלת בשקט את התזמון.
+ * המימוש האמיתי מעל ScheduledExecutorService.
+ * כל משימה עטופה ב-try/catch — חריגה בטיק אינה מבטלת בשקט את התזמון.
  */
 public final class DefaultSurveyScheduler implements SurveyScheduler {
-
     private static final Logger LOG = Logger.getLogger(DefaultSurveyScheduler.class.getName());
 
     private final ScheduledExecutorService scheduler =
@@ -31,6 +30,11 @@ public final class DefaultSurveyScheduler implements SurveyScheduler {
         ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(
                 guard(task), period.toMillis(), period.toMillis(), TimeUnit.MILLISECONDS);
         return () -> future.cancel(false);
+    }
+
+    @Override
+    public long nowMillis() {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
     }
 
     @Override

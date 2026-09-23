@@ -9,9 +9,7 @@ import java.time.Duration;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-
 public class TelegramBotService implements TelegramGateway.UpdateHandler {
-
     private static final Logger LOG = Logger.getLogger(TelegramBotService.class.getName());
     private static final String COMMAND_START = "/start";
     private static final String COMMAND_HELP = "/help";
@@ -38,7 +36,6 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
     public TelegramGateway gateway() {
         return gateway;
     }
-
 
     @Override
     public void onMessage(Message message) {
@@ -81,7 +78,6 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
         String userName = user.getUserName();
         return (userName != null && !userName.isBlank()) ? "@" + userName : "חבר/ה";
     }
-
 
     @Override
     public void onCallback(CallbackQuery callbackQuery) {
@@ -132,7 +128,6 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
                 surveyManager.recordAnswer(from.getId(), question.getId(), chosenOption);
 
         if (result == SurveyManager.AnswerResult.RECORDED) {
-
             if (callbackQuery.getMessage() instanceof Message message) {
                 notifier.markChosenAnswer(message.getChatId(), message.getMessageId(),
                         question, chosenOption, questionIndex, survey.getQuestions().size());

@@ -34,12 +34,11 @@ import java.util.List;
 import java.util.concurrent.CancellationException;
 
 /**
- * R5-M08: המסך מרכיב ממשק ומפעיל את המנהלים בלבד —
+ * המסך מרכיב ממשק ומפעיל את המנהלים בלבד —
  * התצורה ב-{@link AppConfig}, הרכיבים החוזרים ב-{@link UiFactory},
  * והוולידציה בבנאים של {@link Question} ו-{@link Survey}.
  */
 public class SurveyCreationPanel extends JPanel implements CommunityListener {
-
     private static final String CARD_LIST = "list";
     private static final String CARD_LOADING = "loading";
 
@@ -54,7 +53,7 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
     private final JRadioButton chatGptRadio = new JRadioButton("יצירה ע\"י ChatGPT");
     private final JTextField topicField = new JTextField(20);
     private final JButton generateButton = new JButton("✨ צור סקר");
-    /** R5-M14: אפשר לוותר על הפנייה ל-ChatGPT בלי לחכות ל-timeout */
+    /** אפשר לוותר על הפנייה ל-ChatGPT בלי לחכות ל-timeout */
     private final JButton cancelGenerateButton = new JButton("✖ בטל יצירה");
     private final JButton addQuestionButton = new JButton("➕ הוסף שאלה");
     private final JButton editQuestionButton = new JButton("✏️ ערוך שאלה");
@@ -63,7 +62,7 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
     private final JLabel communityStatusLabel = new JLabel();
     private final JLabel questionsCountLabel = new JLabel();
     /**
-     * R6-L01: שדה דחייה חופשי בדקות (0 עד AppConfig.MAX_DELAY_MINUTES) במקום רשימת ערכים
+     * שדה דחייה חופשי בדקות (0 עד AppConfig.MAX_DELAY_MINUTES) במקום רשימת ערכים
      * קבועה מראש — המשתמש יכול לבחור כל דחייה סבירה, לא רק את חמשת הערכים ש-SurveyDelay הציע.
      */
     private final JSpinner delaySpinner =
@@ -193,7 +192,7 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
 
     private JPanel buildLoadingCard() {
         JLabel sparkle = UiFactory.centered(new JLabel("✨", SwingConstants.CENTER));
-        sparkle.setFont(sparkle.getFont().deriveFont(Font.PLAIN, 40f));
+        sparkle.setFont(sparkle.getFont().deriveFont(Font.PLAIN, UiTheme.FONT_HERO_ICON));
 
         UiFactory.centered(UiFactory.styled(loadingTitleLabel, Font.BOLD,
                 UiTheme.FONT_SUBTITLE, UiTheme.BRAND_DARK_BLUE));
@@ -236,7 +235,7 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
 
         long startedAt = System.currentTimeMillis();
         stopElapsedTimer();
-        elapsedTimer = new Timer(1000, e -> {
+        elapsedTimer = new Timer(AppConfig.ELAPSED_TICK_MILLIS, e -> {
             int seconds = (int) ((System.currentTimeMillis() - startedAt) / 1000);
             loadingElapsedLabel.setText(seconds < AppConfig.SLOW_RESPONSE_SECONDS
                     ? "חלפו " + seconds + " שניות…"
@@ -262,7 +261,7 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
     }
 
     private JPanel buildStartPanel() {
-        startButton.setFont(startButton.getFont().deriveFont(Font.BOLD, 15f));
+        startButton.setFont(startButton.getFont().deriveFont(Font.BOLD, UiTheme.FONT_BUTTON));
         startButton.addActionListener(e -> onStartSurvey());
         startButton.setToolTipText("שולח את השאלות לכל חברי הקהילה ופותח את הסקר");
         delaySpinner.setToolTipText("כמה דקות לחכות לפני שהשאלות יישלחו בטלגרם (0 = מיידי, עד "
@@ -366,7 +365,7 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
     }
 
     /**
-     * R5-M14 / R6-M01: ביטול מיידי — ה-SwingWorker מופסק, ובנוסף מבטלים בפועל
+     * ביטול מיידי — ה-SwingWorker מופסק, ובנוסף מבטלים בפועל
      * את חיבור ה-HTTP הפעיל דרך ChatGPTService.cancelCurrentRequest(), כי
      * SwingWorker.cancel(true) בלבד אינו עוצר Socket חוסם (מגבלה ידועה של Thread.interrupt() ב-JDK).
      */
@@ -486,7 +485,7 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
             questionsModel.clear();
             Toast.show(this, delayMinutes <= 0
                             ? "🚀 הסקר נשלח לקהילה!"
-                            : "🚀 הסקר נקבע — יישלח בעוד " + MessageTemplates.formatDuration(delayMinutes * 60),
+                            : "🚀 הסקר נקבע — יישלח בעוד " + MessageTemplates.formatDuration(delayMinutes * AppConfig.SECONDS_PER_MINUTE),
                     Toast.Type.SUCCESS);
         } catch (IllegalStateException | IllegalArgumentException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "שגיאה", JOptionPane.ERROR_MESSAGE);
@@ -494,47 +493,28 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener {
     }
 
     /**
-     * דרישה 4: "עיכוב של מספר דקות שיוזן בממשק" — קלט חופשי, ולכן חייב אימות מפורש.
-     * מיישם את שני התנאים במפורש (לא מסתמך רק על גבולות ה-JSpinner): הערך חייב
-     * להיות מספר שלם, ואסור שיהיה שלילי. בכל כשל מוצגת הודעה מתאימה ומוחזר null.
+     * דרישה 4: עיכוב של מספר דקות שיוזן בממשק. הטקסט עצמו נבדק (ולא ערך ה-JSpinner),
+     * כי ה-JSpinner קוטע בשקט "3.5" ל-3. מותר רק מספר שלם בין 0 ל-MAX_DELAY_MINUTES.
      */
     private Integer readValidatedDelayMinutes() {
-        try {
-            delaySpinner.commitEdit();
-        } catch (java.text.ParseException e) {
+        String raw = ((JSpinner.DefaultEditor) delaySpinner.getEditor()).getTextField().getText().trim();
+        if (!raw.matches("\\d{1,3}") || Integer.parseInt(raw) > AppConfig.MAX_DELAY_MINUTES) {
             JOptionPane.showMessageDialog(this,
-                    "זמן הדחייה חייב להיות מספר שלם של דקות (לדוגמה: 0, 5, 15).",
+                    "זמן הדחייה חייב להיות מספר שלם של דקות בין 0 ל-" + AppConfig.MAX_DELAY_MINUTES
+                            + " (0 = שליחה מיידית).",
                     "ערך לא תקין", JOptionPane.WARNING_MESSAGE);
             return null;
         }
-        Object value = delaySpinner.getValue();
-        if (!(value instanceof Integer)) {
-            JOptionPane.showMessageDialog(this,
-                    "זמן הדחייה חייב להיות מספר שלם של דקות (לדוגמה: 0, 5, 15).",
-                    "ערך לא תקין", JOptionPane.WARNING_MESSAGE);
-            return null;
-        }
-        int delayMinutes = (Integer) value;
-        if (delayMinutes < 0) {
-            JOptionPane.showMessageDialog(this,
-                    "זמן הדחייה לא יכול להיות שלילי — יש להזין 0 ומעלה (0 = שליחה מיידית).",
-                    "ערך לא תקין", JOptionPane.WARNING_MESSAGE);
-            return null;
-        }
-        if (delayMinutes > AppConfig.MAX_DELAY_MINUTES) {
-            JOptionPane.showMessageDialog(this,
-                    "זמן הדחייה המרבי הוא " + AppConfig.MAX_DELAY_MINUTES + " דקות.",
-                    "ערך לא תקין", JOptionPane.WARNING_MESSAGE);
-            return null;
-        }
+        int delayMinutes = Integer.parseInt(raw);
+        delaySpinner.setValue(delayMinutes);
         return delayMinutes;
     }
 
     private boolean confirmStart(int delayMinutes) {
         String timing = delayMinutes <= 0
                 ? "מיידית"
-                : "בעוד " + MessageTemplates.formatDuration(delayMinutes * 60);
-        int durationMinutes = AppConfig.SURVEY_DURATION_SECONDS / 60;
+                : "בעוד " + MessageTemplates.formatDuration(delayMinutes * AppConfig.SECONDS_PER_MINUTE);
+        int durationMinutes = AppConfig.SURVEY_DURATION_SECONDS / AppConfig.SECONDS_PER_MINUTE;
         String message = "לפתוח את הסקר?\n\n"
                 + "❓ שאלות: " + questionsModel.size() + "\n"
                 + "👥 חברי קהילה שיקבלו את הסקר: " + communityManager.getCommunitySize() + "\n"

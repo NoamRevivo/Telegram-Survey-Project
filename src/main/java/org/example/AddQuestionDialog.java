@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class AddQuestionDialog extends JDialog {
-
     private Question result;
     private final JTextField questionField = new JTextField(30);
     private final DefaultListModel<String> optionsModel = new DefaultListModel<>();
@@ -18,14 +17,14 @@ public class AddQuestionDialog extends JDialog {
 
     public AddQuestionDialog(Frame owner, Question existing) {
         super(owner, existing == null ? "➕ הוספת שאלה" : "✏️ עריכת שאלה", true);
-        // R5-M02: ברירת המחדל HIDE_ON_CLOSE מדליפה חלון בכל סגירה ב-X
+        // ברירת המחדל HIDE_ON_CLOSE מדליפה חלון בכל סגירה ב-X
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
         ((JPanel) getContentPane()).setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
 
         JPanel top = new JPanel(new BorderLayout(6, 6));
         JLabel questionLabel = new JLabel("טקסט השאלה:");
-        questionLabel.setFont(questionLabel.getFont().deriveFont(Font.BOLD, 13f));
+        questionLabel.setFont(questionLabel.getFont().deriveFont(Font.BOLD, UiTheme.FONT_SMALL));
         top.add(questionLabel, BorderLayout.NORTH);
         top.add(questionField, BorderLayout.CENTER);
 
@@ -72,7 +71,7 @@ public class AddQuestionDialog extends JDialog {
         centerPanel.add(south, BorderLayout.SOUTH);
 
         JButton confirmButton = new JButton(existing == null ? "✅ הוסף" : "✅ עדכן");
-        confirmButton.setFont(confirmButton.getFont().deriveFont(Font.BOLD, 13f));
+        confirmButton.setFont(confirmButton.getFont().deriveFont(Font.BOLD, UiTheme.FONT_SMALL));
         confirmButton.addActionListener(e -> onConfirm());
 
         add(top, BorderLayout.NORTH);
@@ -128,7 +127,7 @@ public class AddQuestionDialog extends JDialog {
         return false;
     }
 
-    /** R5-M02: החלון משוחרר בכל מסלול יציאה — אישור, ביטול, Esc או X. */
+    /** החלון משוחרר בכל מסלול יציאה — אישור, ביטול, Esc או X. */
     public Question showDialog() {
         try {
             setVisible(true);   // מודאלי — חוסם עד סגירה

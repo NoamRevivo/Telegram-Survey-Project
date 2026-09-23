@@ -5,9 +5,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-
 public class SurveyManager {
-
     public enum AnswerResult { RECORDED, SURVEY_NOT_ACTIVE, ALREADY_ANSWERED, UNKNOWN_PARTICIPANT }
 
     private final CommunityManager communityManager;
@@ -19,7 +17,7 @@ public class SurveyManager {
     private SurveyScheduler.Cancellable reminderTask;
     private SurveyScheduler.Cancellable timeoutTask;
     private SurveyScheduler.Cancellable distributionWatchdog;
-    private int secondsRemaining;
+    private long deadlineMillis;
     private long generationCounter;
 
     public SurveyManager(CommunityManager communityManager) {
@@ -30,7 +28,6 @@ public class SurveyManager {
         this.communityManager = communityManager;
         this.scheduler = scheduler;
     }
-
 
     public void createSurvey(List<Question> questions, int delayMinutes) {
         boolean startImmediately;
@@ -56,7 +53,7 @@ public class SurveyManager {
 
     private void startCountdown(int delayMinutes) {
         state.status(SurveyStatus.PENDING);
-        secondsRemaining = delayMinutes * 60;
+        deadlineMillis = scheduler.nowMillis() + delayMinutes * AppConfig.SECONDS_PER_MINUTE * 1000L;
         long generation = state.generation();
         countdownTask = scheduler.scheduleTicks(() -> onPendingTick(generation), Duration.ofSeconds(1));
     }
@@ -69,8 +66,7 @@ public class SurveyManager {
             if (state == null || state.generation() != generation || state.status() != SurveyStatus.PENDING) {
                 return;
             }
-            secondsRemaining = Math.max(0, secondsRemaining - 1);
-            left = secondsRemaining;
+            left = secondsUntilDeadline();
             surveyId = state.survey().getId();
             if (left <= 0) {
                 cancel(countdownTask);
@@ -94,7 +90,6 @@ public class SurveyManager {
             state.seed(communityManager.getAllMembers());
             state.status(SurveyStatus.ACTIVE);
             state.survey().setStartTime(LocalDateTime.now());
-            secondsRemaining = AppConfig.SURVEY_DURATION_SECONDS;
 
             long generation = state.generation();
             distributionWatchdog = scheduler.scheduleOnce(
@@ -107,16 +102,45 @@ public class SurveyManager {
         listeners.fire(l -> l.onSurveyStarted(survey, snapshot));
     }
 
-
-    public void markDistributionComplete() {
+    /** דיווח סיום הפצה — רק של הסקר הנוכחי; דיווח מאוחר של סקר קודם נזרק. */
+    public void markDistributionComplete(String surveyId) {
         long generation;
         synchronized (this) {
-            if (state == null) {
+            if (state == null || !state.survey().getId().equals(surveyId)) {
                 return;
             }
             generation = state.generation();
         }
         startTimers(generation);
+    }
+
+    /** האם הסקר הזה עדיין פתוח לתשובות — ההפצה מפסיקה לשלוח אחרי הסגירה. */
+    public synchronized boolean isActive(String surveyId) {
+        return state != null
+                && state.status() == SurveyStatus.ACTIVE
+                && state.survey().getId().equals(surveyId);
+    }
+
+    /**
+     * ההודעות לא הגיעו למשתתף: הוא לא יקבל תזכורת ולא יחסום סגירה מוקדמת.
+     * אם כל השאר כבר סיימו — הסקר נסגר מיד.
+     */
+    public void markUnreachable(String surveyId, long telegramId) {
+        boolean closeNow;
+        synchronized (this) {
+            if (!isActive(surveyId)) {
+                return;
+            }
+            SurveyParticipant participant = state.find(telegramId);
+            if (participant == null) {
+                return;
+            }
+            participant.markUnreachable();
+            closeNow = state.anyCompleted() && state.allCompleted();
+        }
+        if (closeNow) {
+            closeSurvey();
+        }
     }
 
     private synchronized void startTimers(long generation) {
@@ -129,14 +153,20 @@ public class SurveyManager {
         cancel(distributionWatchdog);
         distributionWatchdog = null;
 
-        secondsRemaining = AppConfig.SURVEY_DURATION_SECONDS;
+        deadlineMillis = scheduler.nowMillis() + AppConfig.SURVEY_DURATION_SECONDS * 1000L;
         countdownTask = scheduler.scheduleTicks(() -> onActiveTick(generation), Duration.ofSeconds(1));
-        // R6-C01: תזכורת יחידה בלבד — נשלחת AppConfig.REMINDER_DELAY_SECONDS (3 דקות) מתחילת הסקר
+        // תזכורת יחידה בלבד — נשלחת AppConfig.REMINDER_DELAY_SECONDS (3 דקות) מתחילת הסקר
         reminderTask = scheduler.scheduleOnce(
                 () -> sendRemindersIfNeeded(generation),
                 Duration.ofSeconds(AppConfig.REMINDER_DELAY_SECONDS));
         timeoutTask = scheduler.scheduleOnce(
                 this::closeSurvey, Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS));
+    }
+
+    /** מעוגל כלפי מעלה, כך שטיק שהתעכב לא מדלג על שניות בתצוגה. */
+    private int secondsUntilDeadline() {
+        long millisLeft = deadlineMillis - scheduler.nowMillis();
+        return (int) Math.max(0, (millisLeft + 999) / 1000);
     }
 
     private void onActiveTick(long generation) {
@@ -146,8 +176,7 @@ public class SurveyManager {
             if (state == null || state.generation() != generation || state.status() != SurveyStatus.ACTIVE) {
                 return;
             }
-            secondsRemaining = Math.max(0, secondsRemaining - 1);
-            left = secondsRemaining;
+            left = secondsUntilDeadline();
             surveyId = state.survey().getId();
         }
         listeners.fire(l -> l.onCountdownTick(surveyId, left, false));
@@ -244,7 +273,6 @@ public class SurveyManager {
         }
     }
 
-
     public synchronized boolean isSurveyInProgress() {
         return inProgress();
     }
@@ -261,7 +289,6 @@ public class SurveyManager {
     public synchronized List<SurveyParticipant> getCurrentParticipants() {
         return state == null ? new ArrayList<>() : state.snapshot();
     }
-
 
     public void addSurveyListener(SurveyListener listener) {
         listeners.add(listener);

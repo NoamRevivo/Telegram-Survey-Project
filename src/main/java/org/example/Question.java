@@ -8,7 +8,6 @@ import java.util.Set;
 import java.util.UUID;
 
 public class Question {
-
     public static final int MIN_OPTIONS = 2;
     public static final int MAX_OPTIONS = 4;
 

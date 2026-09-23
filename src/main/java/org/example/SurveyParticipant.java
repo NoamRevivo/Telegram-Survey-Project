@@ -3,20 +3,24 @@ import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
-public class SurveyParticipant
-{
+public class SurveyParticipant {
     private final CommunityUser user;
     private volatile ParticipantStatus status;
+    private volatile boolean unreachable;
     private final Map<String, String> answersByQuestionId = new ConcurrentHashMap<>();
 
-    public SurveyParticipant(CommunityUser user)
-    {
+    public SurveyParticipant(CommunityUser user) {
         this.user = user;
         this.status = ParticipantStatus.NOT_STARTED;
     }
 
     public CommunityUser getUser() { return user;}
     public ParticipantStatus getStatus() { return status; }
+    public boolean isUnreachable() { return unreachable; }
+
+    /** ההודעות לא הגיעו אליו (חסם את הבוט וכו') — אינו חוסם סגירה מוקדמת ואינו מקבל תזכורת. */
+    public void markUnreachable() { unreachable = true; }
+
     public int getAnsweredQuestionsCount() { return answersByQuestionId.size(); }
 
     public boolean hasAnswered(String questionId) {

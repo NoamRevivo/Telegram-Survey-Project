@@ -3,6 +3,7 @@ package org.example;
 import javax.swing.BorderFactory;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingConstants;
@@ -15,11 +16,12 @@ import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.RenderingHints;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.util.List;
 
 public class MainFrame extends JFrame {
-
     private final JLabel statusBar = new JLabel();
     private final String botUsername;
 
@@ -45,10 +47,16 @@ public class MainFrame extends JFrame {
         this.communityManager = communityManager;
         this.surveyManager = surveyManager;
         this.botUsername = botUsername;
-        // R5-C02: המספר האמיתי כבר עכשיו — לא 0 שסותר את מסך יצירת הסקר
+        // המספר האמיתי כבר עכשיו — לא 0 שסותר את מסך יצירת הסקר
         this.communitySize = communityManager.getCommunitySize();
 
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                confirmAndExit();
+            }
+        });
         setSize(AppConfig.WINDOW_WIDTH, AppConfig.WINDOW_HEIGHT);
         setMinimumSize(new Dimension(AppConfig.WINDOW_MIN_WIDTH, AppConfig.WINDOW_MIN_HEIGHT));
         setLocationRelativeTo(null);
@@ -65,10 +73,10 @@ public class MainFrame extends JFrame {
         creationPanel = new SurveyCreationPanel(
                 surveyManager, communityManager, chatGPTService, this::showActiveSurveyTab);
 
-        tabs.addTab("קהילה", AppIcons.community(20), communityPanel);
-        tabs.addTab("יצירת סקר", AppIcons.create(20), creationPanel);
-        tabs.addTab("סקר פעיל", AppIcons.active(20), activeSurveyPanel);
-        tabs.addTab("תוצאות", AppIcons.results(20), resultsPanel);
+        tabs.addTab("קהילה", AppIcons.community(UiTheme.ICON_TAB), communityPanel);
+        tabs.addTab("יצירת סקר", AppIcons.create(UiTheme.ICON_TAB), creationPanel);
+        tabs.addTab("סקר פעיל", AppIcons.active(UiTheme.ICON_TAB), activeSurveyPanel);
+        tabs.addTab("תוצאות", AppIcons.results(UiTheme.ICON_TAB), resultsPanel);
 
         statusBarListener = (newUser, newSize) -> SwingUtilities.invokeLater(() -> {
             communitySize = newSize;
@@ -89,13 +97,27 @@ public class MainFrame extends JFrame {
         UiTheme.applyRtl(getContentPane());
     }
 
-    /** R5-L02: אינדקס לפי הרכיב עצמו — לא קבוע ידני שנשבר בשקט כשמוסיפים לשונית. */
+    /** אינדקס לפי הרכיב עצמו — לא קבוע ידני שנשבר בשקט כשמוסיפים לשונית. */
+    /** סגירת החלון באמצע סקר מסיימת אותו בלי הודעה למשתתפים — לכן מבקשים אישור. */
+    private void confirmAndExit() {
+        if (surveyManager.isSurveyInProgress()) {
+            int choice = JOptionPane.showConfirmDialog(this,
+                    "יש סקר פעיל. סגירת התוכנה תפסיק אותו בלי הודעה למשתתפים, והתוצאות יאבדו.\nלסגור בכל זאת?",
+                    "סגירת התוכנה", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (choice != JOptionPane.YES_OPTION) {
+                return;
+            }
+        }
+        dispose();
+        System.exit(0);
+    }
+
     private int tabIndexOf(JPanel panel) {
         return tabs.indexOfComponent(panel);
     }
 
     /**
-     * R5-L06: המעבר ללשונית «סקר פעיל» קורה כאן בלבד, מיד עם פתיחת הסקר —
+     * המעבר ללשונית «סקר פעיל» קורה כאן בלבד, מיד עם פתיחת הסקר —
      * כך הוא עובד גם כשהסקר נפתח בהשהיה, והמאזין שלמטה מטפל רק בכותרות.
      */
     private void showActiveSurveyTab() {
@@ -108,7 +130,7 @@ public class MainFrame extends JFrame {
         header.setBorder(BorderFactory.createEmptyBorder(14, 22, 14, 22));
 
         JLabel title = new JLabel("Telegram Survey Bot — לוח בקרה",
-                AppIcons.robotOnLight(32), SwingConstants.LEADING);
+                AppIcons.robotOnLight(UiTheme.ICON_HEADER), SwingConstants.LEADING);
         title.setIconTextGap(12);
         UiFactory.styled(title, Font.BOLD, UiTheme.FONT_HEADLINE, Color.WHITE);
         header.add(title, BorderLayout.WEST);
@@ -134,7 +156,7 @@ public class MainFrame extends JFrame {
     }
 
     /**
-     * R5-M16: מאזינים שנרשמו על ידי החלון מוסרים כשהוא נסגר —
+     * מאזינים שנרשמו על ידי החלון מוסרים כשהוא נסגר —
      * אחרת חלון שנסגר ממשיך לקבל אירועים ולהחזיק את כל עץ הרכיבים בזיכרון.
      */
     @Override
@@ -150,13 +172,12 @@ public class MainFrame extends JFrame {
 
     /** מעדכן את כותרות הלשוניות בלבד — המעבר ביניהן נעשה ב-showActiveSurveyTab. */
     private class TabsListener implements SurveyListener {
-
         @Override
         public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
             SwingUtilities.invokeLater(() -> {
                 surveyActive = true;
                 int activeTab = tabIndexOf(activeSurveyPanel);
-                tabs.setIconAt(activeTab, AppIcons.live(20));
+                tabs.setIconAt(activeTab, AppIcons.live(UiTheme.ICON_TAB));
                 tabs.setTitleAt(activeTab, "סקר פעיל (חי)");
                 tabs.setTitleAt(tabIndexOf(resultsPanel), "תוצאות (חי)");
                 refreshStatusBar();
@@ -173,7 +194,7 @@ public class MainFrame extends JFrame {
             });
         }
 
-        /** R5-M13: סקר שבוטל אינו מקפיץ ללשונית תוצאות ריקה. */
+        /** סקר שבוטל אינו מקפיץ ללשונית תוצאות ריקה. */
         @Override
         public void onSurveyCancelled(Survey survey) {
             SwingUtilities.invokeLater(() -> {
@@ -185,21 +206,21 @@ public class MainFrame extends JFrame {
 
         private void resetTabTitles() {
             int activeTab = tabIndexOf(activeSurveyPanel);
-            tabs.setIconAt(activeTab, AppIcons.active(20));
+            tabs.setIconAt(activeTab, AppIcons.active(UiTheme.ICON_TAB));
             tabs.setTitleAt(activeTab, "סקר פעיל");
             tabs.setTitleAt(tabIndexOf(resultsPanel), "תוצאות");
         }
     }
 
     private Image createAppIcon() {
-        int size = 64;
+        int size = UiTheme.APP_ICON_SIZE;
         BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2 = image.createGraphics();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setColor(UiTheme.BRAND_BLUE);
         g2.fillOval(0, 0, size, size);
         g2.setColor(Color.WHITE);
-        g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 30));
+        g2.setFont(new Font(Font.SANS_SERIF, Font.BOLD, UiTheme.FONT_APP_ICON));
         FontMetrics fm = g2.getFontMetrics();
         String text = "S";
         int textWidth = fm.stringWidth(text);

@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 
 public class CommunityUser {
-
     private static final String NO_NAME = "חבר/ה";
     private static final String NO_USERNAME = "ללא שם משתמש בטלגרם";
 

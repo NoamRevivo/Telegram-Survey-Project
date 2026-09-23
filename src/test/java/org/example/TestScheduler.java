@@ -5,11 +5,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * R5-M12: שעון וירטואלי — מאפשר לבדוק את כל לוגיקת 5 הדקות
+ * שעון וירטואלי — מאפשר לבדוק את כל לוגיקת 5 הדקות
  * בלי להמתין 5 דקות אמיתיות.
  */
 public class TestScheduler implements SurveyScheduler {
-
     private static final class Task {
         private final Runnable runnable;
         private final long periodMillis;
@@ -37,6 +36,11 @@ public class TestScheduler implements SurveyScheduler {
     @Override
     public Cancellable scheduleTicks(Runnable task, Duration period) {
         return register(new Task(task, nowMillis + period.toMillis(), period.toMillis(), true));
+    }
+
+    @Override
+    public long nowMillis() {
+        return nowMillis;
     }
 
     private Cancellable register(Task task) {

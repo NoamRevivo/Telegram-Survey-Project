@@ -3,9 +3,8 @@ package org.example;
 import java.util.List;
 
 public interface SurveyListener {
-
     /**
-     * R5-C01: מזהה הסקר נשלח יחד עם הטיק, כדי שהתצוגה תוכל לזרוק טיק
+     * מזהה הסקר נשלח יחד עם הטיק, כדי שהתצוגה תוכל לזרוק טיק
      * שהיה באוויר ברגע הסגירה במקום לדרוס איתו את מסך הסיום.
      */
     default void onCountdownTick(String surveyId, int secondsRemaining, boolean isPendingPhase) {
@@ -20,11 +19,11 @@ public interface SurveyListener {
     default void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
     }
 
-    /** R6-C01: תזכורת יחידה בלבד לכל סקר. */
+    /** תזכורת יחידה בלבד לכל סקר. */
     default void onReminderSent(Survey survey, List<SurveyParticipant> notCompleted) {
     }
 
-    /** R5-M13: ביטול בשלב ההמתנה — אין תוצאות ואין הודעת סיום למשתתפים. */
+    /** ביטול בשלב ההמתנה — אין תוצאות ואין הודעת סיום למשתתפים. */
     default void onSurveyCancelled(Survey survey) {
     }
 }
