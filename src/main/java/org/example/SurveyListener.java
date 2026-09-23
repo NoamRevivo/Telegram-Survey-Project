@@ -20,7 +20,8 @@ public interface SurveyListener {
     default void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
     }
 
-    default void onReminderSent(Survey survey, List<SurveyParticipant> notCompleted, boolean isFinalWarning) {
+    /** R6-C01: תזכורת יחידה בלבד לכל סקר. */
+    default void onReminderSent(Survey survey, List<SurveyParticipant> notCompleted) {
     }
 
     /** R5-M13: ביטול בשלב ההמתנה — אין תוצאות ואין הודעת סיום למשתתפים. */

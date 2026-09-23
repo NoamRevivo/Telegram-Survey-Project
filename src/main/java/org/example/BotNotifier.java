@@ -106,11 +106,11 @@ public class BotNotifier implements CommunityListener, SurveyListener {
     }
 
     @Override
-    public void onReminderSent(Survey survey, List<SurveyParticipant> notCompleted, boolean isFinalWarning) {
+    public void onReminderSent(Survey survey, List<SurveyParticipant> notCompleted) {
         gateway.runOnPriorityPool("תזכורות סקר " + survey.getId(), () -> {
             for (SurveyParticipant participant : notCompleted) {
                 gateway.sendText(participant.getUser().getTelegramId(),
-                        MessageTemplates.reminder(survey, participant, isFinalWarning));
+                        MessageTemplates.reminder(survey, participant));
             }
         });
     }

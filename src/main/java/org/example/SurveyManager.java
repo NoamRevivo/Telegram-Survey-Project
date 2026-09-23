@@ -17,7 +17,6 @@ public class SurveyManager {
     private SurveyState state;
     private SurveyScheduler.Cancellable countdownTask;
     private SurveyScheduler.Cancellable reminderTask;
-    private SurveyScheduler.Cancellable finalWarningTask;
     private SurveyScheduler.Cancellable timeoutTask;
     private SurveyScheduler.Cancellable distributionWatchdog;
     private int secondsRemaining;
@@ -132,13 +131,10 @@ public class SurveyManager {
 
         secondsRemaining = AppConfig.SURVEY_DURATION_SECONDS;
         countdownTask = scheduler.scheduleTicks(() -> onActiveTick(generation), Duration.ofSeconds(1));
+        // R6-C01: תזכורת יחידה בלבד — נשלחת AppConfig.REMINDER_DELAY_SECONDS (3 דקות) מתחילת הסקר
         reminderTask = scheduler.scheduleOnce(
-                () -> sendRemindersIfNeeded(generation, false),
+                () -> sendRemindersIfNeeded(generation),
                 Duration.ofSeconds(AppConfig.REMINDER_DELAY_SECONDS));
-        finalWarningTask = scheduler.scheduleOnce(
-                () -> sendRemindersIfNeeded(generation, true),
-                Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS
-                        - AppConfig.FINAL_WARNING_SECONDS_BEFORE_END));
         timeoutTask = scheduler.scheduleOnce(
                 this::closeSurvey, Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS));
     }
@@ -212,14 +208,14 @@ public class SurveyManager {
         listeners.fire(l -> l.onSurveyCancelled(cancelled));
     }
 
-    private void sendRemindersIfNeeded(long generation, boolean isFinalWarning) {
+    private void sendRemindersIfNeeded(long generation) {
         Survey survey;
         List<SurveyParticipant> pending;
         synchronized (this) {
             if (state == null || state.generation() != generation || state.status() != SurveyStatus.ACTIVE) {
                 return;
             }
-            if (!state.markRemindersSent(isFinalWarning)) {
+            if (!state.markRemindersSent()) {
                 return;
             }
             pending = state.notCompleted();
@@ -228,18 +224,16 @@ public class SurveyManager {
             }
             survey = state.survey();
         }
-        listeners.fire(l -> l.onReminderSent(survey, pending, isFinalWarning));
+        listeners.fire(l -> l.onReminderSent(survey, pending));
     }
 
     private void cancelAllTasks() {
         cancel(countdownTask);
         cancel(reminderTask);
-        cancel(finalWarningTask);
         cancel(timeoutTask);
         cancel(distributionWatchdog);
         countdownTask = null;
         reminderTask = null;
-        finalWarningTask = null;
         timeoutTask = null;
         distributionWatchdog = null;
     }

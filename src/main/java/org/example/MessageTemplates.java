@@ -6,7 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
-
+/**
+ * R5-M08: כל הטקסטים של המערכת במקום אחד — הבוט מטפל בתעבורה, לא בניסוח.
+ */
 public final class MessageTemplates {
 
     private static final String[] ALREADY_MEMBER_TEMPLATES = {
@@ -23,6 +25,7 @@ public final class MessageTemplates {
         return "ברוך הבא לקהילה, " + displayName + "!";
     }
 
+    /** R5-L05: ThreadLocalRandom במקום Random משותף לכל חוטי הבוט. */
     public static String alreadyMember(String displayName, LocalDateTime joinedAt) {
         String since = joinedAt == null ? "כבר" : timeSinceJoined(joinedAt);
         String template = ALREADY_MEMBER_TEMPLATES[
@@ -34,8 +37,7 @@ public final class MessageTemplates {
         return "🤖 /start, \"היי\" או \"Hi\" — הצטרפות לקהילה.\n"
                 + "כשנפתח סקר, השאלות יגיעו לכאן עם כפתורי תשובה.\n"
                 + "⏱ יש " + formatDuration(AppConfig.SURVEY_DURATION_SECONDS) + " לענות על כל השאלות.\n"
-                + "🔔 תישלח תזכורת באמצע, ואזהרה אחרונה "
-                + AppConfig.FINAL_WARNING_SECONDS_BEFORE_END + " שניות לפני הסגירה.";
+                + "🔔 אם לא תספיק/י לענות על הכל, תישלח לך תזכורת אישית אחת עם השאלות שנשארו.";
     }
 
     public static String unknownCommand() {
@@ -74,17 +76,11 @@ public final class MessageTemplates {
                   + " מתוך " + totalQuestions + " שאלות.";
     }
 
-    public static String reminder(Survey survey, SurveyParticipant participant, boolean isFinalWarning) {
+    public static String reminder(Survey survey, SurveyParticipant participant) {
         List<Integer> missing = unansweredQuestionNumbers(survey, participant);
 
         StringBuilder text = new StringBuilder();
-        if (isFinalWarning) {
-            text.append("⏰ שימו לב! נותרו ")
-                    .append(AppConfig.FINAL_WARNING_SECONDS_BEFORE_END)
-                    .append(" שניות אחרונות לסקר.\n\n");
-        } else {
-            text.append("🔔 תזכורת: הסקר ייסגר בקרוב.\n\n");
-        }
+        text.append("🔔 תזכורת: הסקר ייסגר בקרוב.\n\n");
 
         if (missing.isEmpty()) {
             text.append("ענית על כל השאלות — תודה רבה! 🙏");

@@ -15,7 +15,6 @@ final class SurveyState {
     /** R5-C01: מזהה דור — טיק של סקר קודם מזוהה ונזרק */
     private final long generation;
     private boolean remindersSent;
-    private boolean finalWarningSent;
     private boolean timersStarted;
 
     SurveyState(Survey survey, long generation) {
@@ -80,14 +79,8 @@ final class SurveyState {
         return new ArrayList<>(participants);
     }
 
-    boolean markRemindersSent(boolean isFinalWarning) {
-        if (isFinalWarning) {
-            if (finalWarningSent) {
-                return false;
-            }
-            finalWarningSent = true;
-            return true;
-        }
+    /** R6-C01: תזכורת יחידה בלבד לכל סקר — מונע כפל תזכורות לאותו משתתף. */
+    boolean markRemindersSent() {
         if (remindersSent) {
             return false;
         }
