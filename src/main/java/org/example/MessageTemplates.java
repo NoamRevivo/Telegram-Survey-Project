@@ -6,9 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
-/**
- * כל הטקסטים של המערכת במקום אחד — הבוט מטפל בתעבורה, לא בניסוח.
- */
+
 public final class MessageTemplates {
     private static final String[] ALREADY_MEMBER_TEMPLATES = {
             "%s, את/ה כבר איתנו! הצטרפת %s - אין צורך להצטרף שוב 😉",
@@ -24,7 +22,6 @@ public final class MessageTemplates {
         return "ברוכ/ה הבא/ה לקהילה, " + displayName + "!";
     }
 
-    /** בוחר ניסוח אקראי; ThreadLocalRandom במקום Random משותף לכל חוטי הבוט. */
     public static String alreadyMember(String displayName, LocalDateTime joinedAt) {
         String since = joinedAt == null ? "כבר" : timeSinceJoined(joinedAt);
         String template = ALREADY_MEMBER_TEMPLATES[
@@ -32,7 +29,6 @@ public final class MessageTemplates {
         return String.format(template, displayName, since);
     }
 
-    /** מצטרף בזמן סקר פעיל: מבינים מיד שהסקר הנוכחי אינו שלו (הפרדה בין הקהילה למשתתפי הסקר). */
     public static String welcomeDuringSurvey(String displayName) {
         return welcome(displayName)
                 + "\nכרגע מתקיים סקר שהתחיל לפני שהצטרפת — תוכל/י להשתתף בסקר הבא.";
@@ -131,7 +127,6 @@ public final class MessageTemplates {
         return "לא הצלחתי לקלוט את הלחיצה, נסה/י שוב.";
     }
 
-    /** שעון לספירה לאחור: mm:ss, ומעל שעה h:mm:ss (דחייה של 120 דקות אינה מוצגת כ-"120:00"). */
     public static String formatClock(int totalSeconds) {
         int seconds = Math.max(0, totalSeconds);
         int hours = seconds / 3600;

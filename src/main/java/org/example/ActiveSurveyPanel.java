@@ -22,9 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * מסך «סקר פעיל»: ספירה לאחור, טבלת משתתפים וסטטיסטיקה בזמן אמת. מתודות המאזין רצות על ה-EDT — נרשם דרך {@link EdtSurveyListener}.
- */
+
 public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     private static final String CARD_IDLE = "idle";
     private static final String CARD_LIVE = "live";
@@ -58,9 +56,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     private List<SurveyParticipant> currentParticipants;
 
     private String closedSurveyId;
-    /** הסקר שהכרטיס מציג כרגע — מעבר לסקר אחר מאפס את הטבלה והסטטיסטיקה (אחרת נשארים נתוני הסקר הקודם) */
     private String displayedSurveyId;
-    /** המנהל אישר עצירה — טיק שמגיע אחר כך אינו מפעיל מחדש את הכפתור */
     private boolean stopRequested;
     private boolean pendingPhase;
 
@@ -151,10 +147,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         }
     }
 
-    /**
-     * המנהל אישר "ביטול לפני שליחה", אבל הספירה הגיעה ל-0 בזמן שחלון האישור היה פתוח והסקר כבר יצא.
-     * אומרים את זה במפורש (במקום להניח שהסקר בוטל) ומציעים לסגור אותו.
-     */
+
     private void offerToCloseStartedSurvey() {
         if (!surveyManager.isSurveyInProgress()) {
             return;
@@ -169,7 +162,6 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         }
     }
 
-    /** מחליפים סקר: מנקים את הטבלה, המיפוי והסטטיסטיקה של הסקר הקודם. */
     private void showSurveyIfNew(String surveyId) {
         if (surveyId.equals(displayedSurveyId)) {
             return;

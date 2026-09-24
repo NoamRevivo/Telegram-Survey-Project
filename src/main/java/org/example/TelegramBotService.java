@@ -12,7 +12,6 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** הצד הנכנס של הבוט: הצטרפות לקהילה, לחיצות על תשובות והודעות חופשיות. */
 public class TelegramBotService implements TelegramGateway.UpdateHandler {
     private static final Logger LOG = Logger.getLogger(TelegramBotService.class.getName());
     private static final String COMMAND_START = "/start";
@@ -43,10 +42,7 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
         return gateway;
     }
 
-    /**
-     * כל התשובות יוצאות דרך {@link #reply}, כלומר לא על חוט ה-polling:
-     * השליחה כוללת ניסיונות חוזרים והמתנה ל-429, ובמקביל חוט ה-polling חייב להמשיך לקבל לחיצות על כפתורי הסקר.
-     */
+
     @Override
     public void onMessage(Message message) {
         Chat chat = message.getChat();
@@ -85,7 +81,6 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
         }
     }
 
-    /** הודעה שאינה טקסט (מדבקה, תמונה, קובץ) — מסבירים פעם אחת בכמה שניות, במקום להתעלם בשקט. */
     @Override
     public void onUnsupportedMessage(Message message) {
         Chat chat = message.getChat();
@@ -102,10 +97,7 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
         gateway.runOnReplyPool("תשובה ל-" + chatId, () -> gateway.sendText(chatId, text));
     }
 
-    /**
-     * פקודת סלאש מגיעה לעיתים עם פרמטר (t.me/Bot?start=abc שולח "/start abc")
-     * או עם תיוג הבוט ("/start@BotName") — בשני המקרים הפקודה עצמה היא ההתחלה.
-     */
+
     static String commandOf(String text) {
         String trimmed = text == null ? "" : text.trim();
         if (trimmed.isEmpty() || trimmed.charAt(0) != COMMAND_PREFIX) {
@@ -125,10 +117,7 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
         return (userName != null && !userName.isBlank()) ? "@" + userName : "חבר/ה";
     }
 
-    /**
-     * אישור הלחיצה עובר לתור נפרד וללא ניסיון חוזר: 429 עם retryAfter לא יחסום את חוט ה-polling,
-     * ואישור לחיצה שמגיע באיחור ממילא אינו מועיל למשתמש.
-     */
+
     @Override
     public void onCallback(CallbackQuery callbackQuery) {
         AnswerCallbackQuery feedback = new AnswerCallbackQuery();

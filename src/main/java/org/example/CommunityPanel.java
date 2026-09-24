@@ -17,7 +17,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.Set;
 
-/** מסך «קהילה»: טבלת החברים וסך החברים. מתודות המאזין רצות על ה-EDT — נרשם דרך {@link EdtCommunityListener}. */
 public class CommunityPanel extends JPanel implements CommunityListener {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
@@ -56,7 +55,6 @@ public class CommunityPanel extends JPanel implements CommunityListener {
     @Override
     public void onMemberAdded(CommunityUser newUser, int newCommunitySize) {
         boolean added = addRow(newUser);
-        // האירוע נבנה מחוץ ל-EDT: אירועים שהגיעו בסדר אחר, או חבר שהתווסף בין הבנייה לרישום, משלימים כאן
         boolean synced = syncWithManager();
         updateTotalLabel();
         if (added || synced) {
@@ -67,7 +65,6 @@ public class CommunityPanel extends JPanel implements CommunityListener {
         }
     }
 
-    /** מוסיף לטבלה כל חבר שקיים במנהל ועדיין לא מוצג, לפי סדר ההצטרפות. */
     private boolean syncWithManager() {
         boolean any = false;
         for (CommunityUser user : communityManager.getAllMembers()) {

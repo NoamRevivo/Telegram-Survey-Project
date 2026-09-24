@@ -19,11 +19,7 @@ import java.awt.RenderingHints;
 import java.awt.Window;
 import java.util.logging.Logger;
 
-/**
- * בועת התראה מונפשת שאינה חוסמת את המשתמש.
- * משמשת לכל ההתראות החיוביות במערכת: הצטרפות חבר,
- * סיום יצירת שאלות ב-ChatGPT, והתחלת סקר.
- */
+
 public class Toast extends JWindow {
     public enum Type {
         SUCCESS(UiTheme.SUCCESS_GREEN),
@@ -49,16 +45,12 @@ public class Toast extends JWindow {
     private static final int FADE_FRAME_MILLIS = 20;
 
     private boolean opacitySupported = true;
-    /** האם הבועה הזו נספרה — כדי שהמונה יירד בדיוק פעם אחת */
     private boolean counted;
-    /** כמה בועות מוצגות כרגע, כדי שבועה חדשה תופיע מעל הקודמת (EDT בלבד) */
     private static int visibleCount = 0;
 
     public Toast(Window owner, String message, Type type) {
         super(owner);
         setSize(WIDTH, HEIGHT);
-        // חלון בעלות של חלון האב נשאר מעליו; בלי alwaysOnTop הבועה לא מופיעה מעל אפליקציות אחרות,
-        // ובלי focusable היא לא גונבת מיקוד מהמנהל באמצע הקלדה
         setFocusableWindowState(false);
 
         boolean transparentBg = true;
@@ -94,10 +86,8 @@ public class Toast extends JWindow {
         UiTheme.applyRtl(bubble);
     }
 
-    /** דרך הקריאה המומלצת — מאתרת לבד את חלון האב ולא עושה דבר אם אין כזה. */
     public static void show(Component source, String message, Type type) {
         Window owner = SwingUtilities.getWindowAncestor(source);
-        // הצפה של אירועים (למשל הצטרפות המונית) לא בונה ערימת בועות שיוצאת מהמסך
         if (owner != null && visibleCount < AppConfig.MAX_STACKED_TOASTS) {
             new Toast(owner, message, type).showAnimated();
         }
@@ -162,10 +152,7 @@ public class Toast extends JWindow {
         fadeTimer.start();
     }
 
-    /**
-     * המונה יורד כאן ולא בתוך הטיימר —
-     * בועה שנסגרה בדרך אחרת (סגירת חלון האב, dispose חיצוני) לא משאירה את המונה תקוע גבוה.
-     */
+
     @Override
     public void dispose() {
         if (counted) {

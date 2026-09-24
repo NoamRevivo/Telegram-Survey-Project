@@ -14,7 +14,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** לקוח HTTP לשירות יצירת השאלות; בקשה אחת בכל פעם, עם אפשרות ביטול מבחוץ. */
 public class ChatGPTService {
     private static final Logger LOG = Logger.getLogger(ChatGPTService.class.getName());
     private final String token;
@@ -31,14 +30,12 @@ public class ChatGPTService {
                 .build());
     }
 
-    /** הלקוח מוזרק כדי שאפשר יהיה לבדוק את הטיפול בתשובות ובכשלי רשת בלי רשת אמיתית. */
     ChatGPTService(String token, String endpoint, OkHttpClient client) {
         this.token = token;
         this.endpoint = endpoint;
         this.client = client;
     }
 
-    /** שולח את הנושא לשירות ומחזיר את השאלות שפורקו; כל כשל מתורגם ל-{@link SurveyGenerationException} בעברית. */
     public GeneratedSurvey generateSurvey(String topic) throws SurveyGenerationException {
         Request request = buildRequest(topic);
         Call call = client.newCall(request);
@@ -47,7 +44,6 @@ public class ChatGPTService {
             call.cancel();
         }
         try (Response response = call.execute()) {
-            // peekBody: קורא לכל היותר MAX_RESPONSE_BYTES, כך ששרת תקול לא יטען לזיכרון תגובה בגודל חופשי
             String responseBody = response.body() == null
                     ? ""
                     : response.peekBody(AppConfig.MAX_RESPONSE_BYTES).string();
@@ -67,14 +63,7 @@ public class ChatGPTService {
         }
     }
 
-    /**
-     * בדיקת הקלט ובניית הבקשה — בלי רשת, ולכן ניתנת לבדיקה ישירה.
-     * <p>
-     * שירות ה-API (shaitest-production) קורא את הטוקן מפרמטר ה-query בשם token ולא מכותרת
-     * ה-Authorization — נבדק אמפירית: בקשה בלי token בכלל מחזירה code 1024, ועם token שגוי
-     * code 1029. לכן הטוקן נשלח כאן בשני האופנים: כפרמטר, כדי שהשירות בפועל יזהה אותו, וגם
-     * ב-Authorization, כגיבוי אם השירות ישודרג בעתיד לקרוא ממנו.
-     */
+
     Request buildRequest(String topic) throws SurveyGenerationException {
         if (token == null || token.isBlank()) {
             throw new SurveyGenerationException("חסר משתנה הסביבה "
@@ -103,10 +92,7 @@ public class ChatGPTService {
                 .build();
     }
 
-    /**
-     * הודעות השגיאה של OkHttp באנגלית ואינן מובנות למנהל — כל כשל רשת מתורגם כאן לעברית,
-     * והחריגה המקורית נשמרת כסיבה וכתובה ללוג.
-     */
+
     private SurveyGenerationException describeNetworkFailure(IOException e, Call call) {
         LOG.log(Level.WARNING, "הפנייה לשירות יצירת השאלות נכשלה", e);
         if (call.isCanceled()) {

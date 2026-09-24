@@ -21,7 +21,6 @@ import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 
-/** החלון הראשי: לשוניות, שורת מצב וחיווט המאזינים למסכים. */
 public class MainFrame extends JFrame {
     private static final String TITLE_RESULTS = "תוצאות";
     private static final String TITLE_RESULTS_LIVE = "תוצאות (חי)";
@@ -40,13 +39,11 @@ public class MainFrame extends JFrame {
     private final SurveyCreationPanel creationPanel;
     private final ActiveSurveyPanel activeSurveyPanel;
     private final ResultsPanel resultsPanel;
-    /** המאזינים הרשומים בפועל (עטופים ב-EDT), כדי שאפשר יהיה להסיר בדיוק אותם ב-dispose */
     private final List<CommunityListener> communityListeners = new ArrayList<>();
     private final List<SurveyListener> surveyListeners = new ArrayList<>();
 
     private int communitySize;
     private boolean surveyActive;
-    /** הסטטוס «מחובר» מוצג רק אחרי שהבוט נרשם בטלגרם בפועל — החלון עולה קודם */
     private boolean botConnected;
 
     public MainFrame(CommunityManager communityManager,
@@ -105,10 +102,7 @@ public class MainFrame extends JFrame {
         UiTheme.applyRtl(getContentPane());
     }
 
-    /**
-     * סגירת החלון באמצע סקר: המשתתפים מקבלים הודעה שהסקר נסגר, ולא נשארים ממתינים לסקר שנעלם.
-     * ההודעות נשלחות בתור העדיפות, ו-shutdownGracefully ממתין להן לפני הכיבוי.
-     */
+
     private void confirmAndExit() {
         if (surveyManager.isSurveyInProgress()) {
             boolean confirmed = Dialogs.confirmWarning(this, "סגירת התוכנה",
@@ -124,7 +118,6 @@ public class MainFrame extends JFrame {
         System.exit(0);
     }
 
-    /** כל מסך מקבל את האירועים על ה-EDT; ההעברה נעשית כאן, לא בכל מסך בנפרד. */
     private void registerCommunityListener(CommunityListener listener) {
         CommunityListener onEdt = EdtCommunityListener.wrap(listener);
         communityListeners.add(onEdt);
@@ -137,15 +130,11 @@ public class MainFrame extends JFrame {
         surveyManager.addSurveyListener(onEdt);
     }
 
-    /** אינדקס לפי הרכיב עצמו — לא קבוע ידני שנשבר בשקט כשמוסיפים לשונית. */
     private int tabIndexOf(JPanel panel) {
         return tabs.indexOfComponent(panel);
     }
 
-    /**
-     * המעבר ללשונית «סקר פעיל» קורה כאן בלבד, מיד עם פתיחת הסקר —
-     * כך הוא עובד גם כשהסקר נפתח בהשהיה, והמאזין שלמטה מטפל רק בכותרות.
-     */
+
     private void showActiveSurveyTab() {
         tabs.setSelectedIndex(tabIndexOf(activeSurveyPanel));
     }
@@ -175,7 +164,6 @@ public class MainFrame extends JFrame {
         return statusBar;
     }
 
-    /** נקרא מחוץ ל-EDT (מ-Main) אחרי שרישום הבוט הצליח. */
     public void markBotConnected() {
         SwingUtilities.invokeLater(() -> {
             botConnected = true;
@@ -190,10 +178,7 @@ public class MainFrame extends JFrame {
                 + "   |   👥 " + communitySize + " חברים בקהילה   |   " + surveyPart);
     }
 
-    /**
-     * מאזינים שנרשמו על ידי החלון מוסרים כשהוא נסגר —
-     * אחרת חלון שנסגר ממשיך לקבל אירועים ולהחזיק את כל עץ הרכיבים בזיכרון.
-     */
+
     @Override
     public void dispose() {
         communityListeners.forEach(communityManager::removeListener);
@@ -203,7 +188,6 @@ public class MainFrame extends JFrame {
         super.dispose();
     }
 
-    /** מעדכן את כותרות הלשוניות בלבד — המעבר ביניהן נעשה ב-showActiveSurveyTab. */
     private class TabsListener implements SurveyListener {
         @Override
         public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
@@ -223,7 +207,6 @@ public class MainFrame extends JFrame {
             refreshStatusBar();
         }
 
-        /** סקר שבוטל אינו מקפיץ ללשונית תוצאות ריקה. */
         @Override
         public void onSurveyCancelled(Survey survey) {
             surveyActive = false;
@@ -239,10 +222,7 @@ public class MainFrame extends JFrame {
         }
     }
 
-    /**
-     * המנהל שצופה בסקר עובר אוטומטית לתוצאות; מי שנמצא במסך אחר, למשל באמצע בניית סקר חדש,
-     * אינו נזרק ממנו — הלשונית רק מסומנת, והסימון נמחק כשנכנסים אליה.
-     */
+
     private void revealResults() {
         if (tabs.getSelectedComponent() == activeSurveyPanel) {
             tabs.setSelectedIndex(tabIndexOf(resultsPanel));

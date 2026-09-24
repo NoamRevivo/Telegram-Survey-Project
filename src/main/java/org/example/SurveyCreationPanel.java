@@ -24,12 +24,7 @@ import java.awt.Window;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * המסך מרכיב ממשק ומפעיל את המנהלים בלבד —
- * התצורה ב-{@link AppConfig}, הרכיבים החוזרים ב-{@link UiFactory} וב-{@link Dialogs},
- * יצירת השאלות ב-{@link QuestionGenerationController},
- * והוולידציה בבנאים של {@link Question} ו-{@link Survey}.
- */
+
 public class SurveyCreationPanel extends JPanel {
     private static final String CARD_LIST = "list";
     private static final String CARD_LOADING = "loading";
@@ -94,7 +89,6 @@ public class SurveyCreationPanel extends JPanel {
         onQuestionsChanged();
     }
 
-    /** מסך התזמון וההפעלה — נרשם כמאזין לקהילה ולסקר על ידי החלון הראשי. */
     public SurveyStartPanel startPanel() {
         return startPanel;
     }
@@ -288,7 +282,6 @@ public class SurveyCreationPanel extends JPanel {
                         + " השאלות שכבר ברשימה.\nלהמשיך?");
     }
 
-    /** מקצר נושא ארוך כדי שהבועה תישאר בשורה אחת */
     private String quoted(String topic) {
         String trimmed = topic.length() > AppConfig.TOPIC_DISPLAY_MAX_CHARS
                 ? topic.substring(0, AppConfig.TOPIC_DISPLAY_MAX_CHARS) + "…"

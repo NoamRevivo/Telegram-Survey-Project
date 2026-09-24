@@ -5,10 +5,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * מכונת המצבים של הסקר (PENDING, ACTIVE, COMPLETED, CANCELLED): יצירה, ספירה לאחור, תזכורת, סגירה וקליטת תשובות.
- * כל שינוי מצב נעשה תחת מנעול, ואירועים נשלחים למאזינים מחוץ לו. מזהה דור מבטל טיקים ותזמונים של סקר קודם.
- */
+
 public class SurveyManager {
     public enum AnswerResult { RECORDED, SURVEY_NOT_ACTIVE, ALREADY_ANSWERED, UNKNOWN_PARTICIPANT, INVALID_ANSWER }
 
@@ -88,10 +85,7 @@ public class SurveyManager {
         }
     }
 
-    /**
-     * הדור נבדק כדי שהתחלה שהתעכבה בין שני מנעולים לא תפעיל סקר חדש שנוצר בינתיים
-     * (למשל: הסקר בוטל ברגע האפס והמנהל יצר סקר אחר עם דחייה).
-     */
+
     private void startSurvey(long generation) {
         Survey survey;
         List<SurveyParticipant> snapshot;
@@ -113,7 +107,6 @@ public class SurveyManager {
         listeners.fire(l -> l.onSurveyStarted(survey, snapshot));
     }
 
-    /** דיווח סיום הפצה — רק של הסקר הנוכחי; דיווח מאוחר של סקר קודם נזרק. */
     public void markDistributionComplete(String surveyId) {
         long generation;
         synchronized (this) {
@@ -125,15 +118,11 @@ public class SurveyManager {
         startTimers(generation);
     }
 
-    /** סקר במצב ACTIVE בלבד (ולא ממתין): חברים שמצטרפים עכשיו אינם שייכים אליו. */
     public synchronized boolean isSurveyRunning() {
         return state != null && state.status() == SurveyStatus.ACTIVE;
     }
 
-    /**
-     * ההפצה למשתתף נכשלה זמנית (או התאוששה בניסיון חוזר). משתתף חסום/לא נגיש אינו מסומן כאן.
-     * המאזינים מקבלים אירוע רק כשהמצב באמת השתנה.
-     */
+
     public void markDeliveryFailed(String surveyId, long telegramId, boolean failed) {
         SurveyParticipant changed = null;
         synchronized (this) {
@@ -153,17 +142,13 @@ public class SurveyManager {
         }
     }
 
-    /** האם הסקר הזה עדיין פתוח לתשובות — ההפצה מפסיקה לשלוח אחרי הסגירה. */
     public synchronized boolean isActive(String surveyId) {
         return state != null
                 && state.status() == SurveyStatus.ACTIVE
                 && state.survey().getId().equals(surveyId);
     }
 
-    /**
-     * ההודעות לא הגיעו למשתתף: הוא לא יקבל תזכורת ולא יחסום סגירה מוקדמת.
-     * אם כל השאר כבר סיימו — הסקר נסגר מיד.
-     */
+
     public void markUnreachable(String surveyId, long telegramId) {
         SurveyParticipant newlyUnreachable = null;
         boolean closeNow;
@@ -211,7 +196,6 @@ public class SurveyManager {
                 () -> closeSurvey(generation), Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS));
     }
 
-    /** מעוגל כלפי מעלה, כך שטיק שהתעכב לא מדלג על שניות בתצוגה. */
     private int secondsUntilDeadline() {
         long millisLeft = deadlineMillis - scheduler.nowMillis();
         return (int) Math.max(0, (millisLeft + 999) / 1000);
@@ -230,10 +214,7 @@ public class SurveyManager {
         listeners.fire(l -> l.onCountdownTick(surveyId, left, false));
     }
 
-    /**
-     * האימות מתבצע כולו בתוך המנעול, מול הסקר שמזההו התקבל: אין חלון שבו הסקר מתחלף
-     * בין הבדיקה לרישום, והתשובה נגזרת מאינדקס האפשרות — מחרוזת לא חוקית אינה יכולה להיקלט.
-     */
+
     public AnswerResult recordAnswer(String surveyId, long telegramId, int questionIndex, int optionIndex) {
         SurveyParticipant participant;
         boolean everyoneFinished;
@@ -273,9 +254,7 @@ public class SurveyManager {
         closeSurvey(ANY_GENERATION);
     }
 
-    /**
-     * משימה שנקבעה לסקר מסוים סוגרת רק אותו: סקר חדש שהחליף אותו בינתיים אינו נסגר בטעות.
-     */
+
     private void closeSurvey(long expectedGeneration) {
         Survey closed;
         List<SurveyParticipant> snapshot;
@@ -295,10 +274,7 @@ public class SurveyManager {
         listeners.fire(l -> l.onSurveyClosed(closed, snapshot));
     }
 
-    /**
-     * @return true אם הסקר אכן בוטל; false אם אין סקר ממתין (למשל: הוא כבר יצא לדרך בזמן שהמנהל אישר ביטול),
-     * כדי שהקורא לא יניח בטעות שהסקר בוטל
-     */
+
     public boolean cancelPendingSurvey() {
         Survey cancelled;
         synchronized (this) {

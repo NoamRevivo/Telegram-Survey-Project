@@ -86,10 +86,6 @@ class CoreModelTest {
         assertEquals(1, manager.getCommunitySize());
     }
 
-    /**
-     * מאזין שזורק חריגה אינו מפיל את שאר המאזינים.
-     * הלוגר מושתק לרגע — החריגה כאן מכוונת, ואין טעם להציף את פלט הבדיקות בעקבות מחסנית.
-     */
     @Test
     void failingListenerDoesNotStopTheOthers() {
         Logger logger = Logger.getLogger(Listeners.class.getName());

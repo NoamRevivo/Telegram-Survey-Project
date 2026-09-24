@@ -4,11 +4,9 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
-/** חבר בקהילה, כפי שהוא מזוהה בטלגרם. */
 public class CommunityUser {
     private static final String NO_NAME = "חבר/ה";
     private static final String NO_USERNAME = "ללא שם משתמש בטלגרם";
-    /** סדר הצטרפות מונוטוני — שעון הקיר (LocalDateTime) יכול לזוז אחורה, למשל במעבר שעון קיץ */
     private static final AtomicLong JOIN_SEQUENCE = new AtomicLong();
 
     private final long telegramId;

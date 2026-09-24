@@ -18,7 +18,6 @@ import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
 
-/** בניית רכיבי Swing חוזרים: טבלאות, מסגרות וכפתורים. */
 public final class UiFactory {
     private UiFactory() {
     }

@@ -19,7 +19,6 @@ import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 
-/** דיאלוג הוספה ועריכה של שאלה אחת: נוסח ואפשרויות תשובה. מחזיר {@link Question} תקין או null אם בוטל. */
 public class AddQuestionDialog extends JDialog {
     private Question result;
     private final JTextField questionField = new JTextField(30);
@@ -140,7 +139,6 @@ public class AddQuestionDialog extends JDialog {
         return false;
     }
 
-    /** החלון משוחרר בכל מסלול יציאה — אישור, ביטול, Esc או X. */
     public Question showDialog() {
         try {
             setVisible(true);

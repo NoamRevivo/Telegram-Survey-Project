@@ -22,12 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * התוצאות מתעדכנות בזמן אמת תוך כדי הסקר.
- * <p>
- * בזמן הסקר הסדר קבוע כדי שהשורות לא יקפצו בכל תשובה נכנסת,
- * וברגע הסגירה הן ממוינות לפי שכיחות בסדר יורד — כנדרש בדרישה 6.
- */
+
 public class ResultsPanel extends JPanel implements SurveyListener {
     private static final String CARD_EMPTY = "empty";
     private static final String CARD_RESULTS = "results";
@@ -112,7 +107,6 @@ public class ResultsPanel extends JPanel implements SurveyListener {
         repaint();
     }
 
-    /** סקר שבוטל לפני השליחה אינו מציג לשונית תוצאות ריקה. */
     @Override
     public void onSurveyCancelled(Survey survey) {
         participants = new ArrayList<>();
@@ -150,7 +144,6 @@ public class ResultsPanel extends JPanel implements SurveyListener {
         }
     }
 
-    /** אחוז מעוגל; 0 כשאין מכנה, כדי שסקר בלי תשובות לא יציג NaN. */
     private static int percentOf(long part, long total) {
         return total == 0 ? 0 : Math.round(part * (float) PERCENT / total);
     }
@@ -171,7 +164,6 @@ public class ResultsPanel extends JPanel implements SurveyListener {
                 + "   ·   ✍ השיבו לפחות על שאלה אחת: " + responded + " מתוך " + total;
     }
 
-    /** מחזיק את הרכיבים של שאלה אחת כדי לעדכן ערכים בלי לבנות מחדש ובלי הבהובים */
     private static class QuestionView {
         private final Question question;
         private final int questionNumber;
@@ -179,7 +171,6 @@ public class ResultsPanel extends JPanel implements SurveyListener {
         private final JPanel panel = new JPanel();
         private final Map<String, JProgressBar> barsByOption = new LinkedHashMap<>();
         private final Map<String, JLabel> labelsByOption = new LinkedHashMap<>();
-        /** שורת האפשרות כרכיב אחד — כך אפשר למיין בלי לבנות מחדש */
         private final Map<String, JComponent> rowsByOption = new LinkedHashMap<>();
 
         private QuestionView(int questionNumber, Question question) {
@@ -264,7 +255,6 @@ public class ResultsPanel extends JPanel implements SurveyListener {
             return counts;
         }
 
-        /** ממיין את שורות האפשרויות לפי מספר הקולות בסדר יורד (שובר שוויון: סדר המקור). */
         private void reorderRows(Map<String, Integer> counts) {
             List<String> ordered = new ArrayList<>(counts.keySet());
             ordered.sort(Comparator.comparingInt((String option) -> counts.get(option)).reversed());

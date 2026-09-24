@@ -11,7 +11,6 @@ import javax.swing.UIManager;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** נקודת הכניסה: מרכיבה את המנהלים, פותחת את החלון ומחברת את הבוט לטלגרם. */
 public class Main {
     private static final Logger LOG = Logger.getLogger(Main.class.getName());
 

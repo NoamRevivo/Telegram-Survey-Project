@@ -8,12 +8,10 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
-/** שאלה עם אפשרויות תשובה. הוולידציה בבנאי — אי אפשר ליצור שאלה לא תקינה. */
 public class Question {
     public static final int MIN_OPTIONS = 2;
     public static final int MAX_OPTIONS = 4;
     public static final int MAX_TEXT_LENGTH = 300;
-    /** אפשרות ארוכה מדי נחתכת בכפתור בטלגרם, ובנוסף מנפחת את הודעת "התשובה שלך" */
     public static final int MAX_OPTION_LENGTH = 64;
 
     private static final String ELLIPSIS = "…";
@@ -55,12 +53,10 @@ public class Question {
         this.options = cleaned;
     }
 
-    /** מפתח השוואה לאפשרות — כך הכפילויות מזוהות באותה צורה בבנאי, בפרסר ובדיאלוג. */
     static String optionKey(String option) {
         return option.trim().toLowerCase(Locale.ROOT);
     }
 
-    /** לפרסר של תשובות שירות חיצוני: חותך אפשרות ארוכה מדי במקום לפסול את כל השאלה. */
     static String truncateOption(String option) {
         String trimmed = option.trim();
         if (trimmed.length() <= MAX_OPTION_LENGTH) {

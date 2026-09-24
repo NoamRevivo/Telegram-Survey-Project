@@ -17,12 +17,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * שכבת התעבורה מול טלגרם בלבד — שליחה, retry, תורי עבודה וכיבוי מסודר.
- * היא אינה יודעת דבר על סקרים, קהילה או ניסוחים.
- */
+
 public class TelegramGateway extends TelegramLongPollingBot implements MessageSender {
-    /** תוצאת שליחה מפורטת — הקורא מבדיל בין חסימה קבועה לבין תקלה זמנית. */
     public enum SendResult {
         DELIVERED,
         BLOCKED,
@@ -30,13 +26,11 @@ public class TelegramGateway extends TelegramLongPollingBot implements MessageSe
         TRANSIENT_FAILURE
     }
 
-    /** מי שמטפל בעדכונים הנכנסים — הפרדה בין התעבורה לבין הלוגיקה. */
     public interface UpdateHandler {
         void onMessage(Message message);
 
         void onCallback(CallbackQuery callbackQuery);
 
-        /** הודעה שאינה טקסט (מדבקה, תמונה...) בשיחה עם הבוט. ברירת המחדל: להתעלם. */
         default void onUnsupportedMessage(Message message) {
         }
     }
@@ -53,14 +47,12 @@ public class TelegramGateway extends TelegramLongPollingBot implements MessageSe
     private final String botToken;
     private final UpdateHandler handler;
 
-    /** הפצה במקביל למשתתפים, ותור נפרד לתזכורות ולהודעות סיום */
     private final ExecutorService notificationExecutor =
             Executors.newFixedThreadPool(AppConfig.NOTIFICATION_POOL_SIZE, new NamedThreadFactory("bot-notify"));
     private final ExecutorService priorityExecutor =
             Executors.newSingleThreadExecutor(new NamedThreadFactory("bot-priority"));
     private final ExecutorService ackExecutor =
             Executors.newFixedThreadPool(AppConfig.ACK_POOL_SIZE, new NamedThreadFactory("bot-ack"));
-    /** תשובות לפקודות — לא על חוט ה-polling, כדי שהמתנה ל-429 לא תעכב לחיצות על כפתורי הסקר */
     private final ExecutorService replyExecutor =
             Executors.newFixedThreadPool(AppConfig.REPLY_POOL_SIZE, new NamedThreadFactory("bot-reply"));
 
@@ -80,7 +72,6 @@ public class TelegramGateway extends TelegramLongPollingBot implements MessageSe
         return botToken;
     }
 
-    /** עדכון פגום לא מפיל את חוט ה-polling של הספרייה. */
     @Override
     public void onUpdateReceived(Update update) {
         try {
@@ -114,13 +105,7 @@ public class TelegramGateway extends TelegramLongPollingBot implements MessageSe
         return trySend(method) == SendResult.DELIVERED;
     }
 
-    /**
-     * שליחה עם ניסיונות חוזרים על כישלון זמני בלבד (429, 5xx, תקלת רשת), עם המתנה גדלה.
-     * חסימה של המשתתף (403) ותוכן פסול (400) אינם נחזרים — ניסיון נוסף לא ישנה אותם.
-     * <p>
-     * סמנטיקה של "לפחות פעם אחת": אם הבקשה הגיעה לטלגרם אבל התשובה נקטעה (timeout בקריאה), הניסיון החוזר
-     * עלול לשלוח את ההודעה פעמיים. לכפתורי הסקר זה בטוח — שני הכפתורים נושאים אותם נתונים, והתשובה השנייה נדחית כ"כבר ענית".
-     */
+
     @Override
     public SendResult trySend(BotApiMethod<?> method) {
         for (int attempt = 1; attempt <= AppConfig.SEND_MAX_ATTEMPTS; attempt++) {
@@ -146,12 +131,10 @@ public class TelegramGateway extends TelegramLongPollingBot implements MessageSe
         return SendResult.TRANSIENT_FAILURE;
     }
 
-    /** ניסיון יחיד ללא המתנה — לאישורי לחיצה, שאסור שיחסמו את חוט ה-polling. */
     public SendResult sendOnce(BotApiMethod<?> method) {
         return attemptOnce(method).result();
     }
 
-    /** נקודת החיבור היחידה לספרייה — ניתנת להחלפה בבדיקות של לוגיקת ה-retry. */
     protected void executeApi(BotApiMethod<?> method) throws TelegramApiException {
         execute(method);
     }
@@ -201,16 +184,11 @@ public class TelegramGateway extends TelegramLongPollingBot implements MessageSe
         runAsync(replyExecutor, description, task);
     }
 
-    /** אישורי לחיצה בתור נפרד: 429 באישור אחד לא יעצור את חוט ה-polling ואת שאר העדכונים. */
     public void runOnAckPool(String description, Runnable task) {
         runAsync(ackExecutor, description, task);
     }
 
-    /**
-     * execute ולא submit.
-     * submit קובר כל חריגה בתוך Future שאיש לא קורא — משתתף שלא קיבל את הסקר
-     * בגלל NPE היה נראה «טרם ענה» לנצח, בלי שורת לוג אחת.
-     */
+
     private void runAsync(ExecutorService executor, String description, Runnable task) {
         try {
             executor.execute(() -> {
