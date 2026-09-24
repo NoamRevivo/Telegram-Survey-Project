@@ -15,11 +15,7 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * תזמון והפעלה: זמן דחייה, מצב הקהילה וכפתור «התחל סקר».
- * המסך אינו מכיר את עריכת השאלות — הוא מקבל אותן מ-{@code questions} ומדווח ל-{@code onStarted} כשהסקר נפתח.
- * כל המתודות רצות על ה-EDT; ההעברה אליו נעשית ב-{@link EdtSurveyListener} וב-{@link EdtCommunityListener}.
- */
+
 public class SurveyStartPanel extends JPanel implements CommunityListener, SurveyListener {
     private static final Logger LOG = Logger.getLogger(SurveyStartPanel.class.getName());
     private static final String START_TOOLTIP = "שולח את השאלות לכל חברי הקהילה ופותח את הסקר";
@@ -67,7 +63,6 @@ public class SurveyStartPanel extends JPanel implements CommunityListener, Surve
         updateCommunityStatus();
     }
 
-    /** המסך נעול בזמן שהשאלות עדיין נוצרות — אי אפשר לפתוח סקר עם רשימה שעומדת להיות מוחלפת. */
     void setBlocked(boolean blocked) {
         this.blocked = blocked;
         refreshStartButton();
@@ -108,10 +103,7 @@ public class SurveyStartPanel extends JPanel implements CommunityListener, Surve
         }
     }
 
-    /**
-     * הכפתור פעיל רק כשאין סקר פעיל וגם אין סקר ממתין (PENDING) —
-     * אחרת הלחיצה נכשלת רק אחרי חלון האישור, עם «סקר פעיל כבר קיים».
-     */
+
     private void refreshStartButton() {
         boolean busy = surveyManager.isSurveyInProgress();
         boolean ready = !blocked && !busy && lastCommunitySize >= AppConfig.MIN_COMMUNITY_SIZE;
@@ -145,16 +137,12 @@ public class SurveyStartPanel extends JPanel implements CommunityListener, Surve
         } catch (IllegalStateException | IllegalArgumentException e) {
             Dialogs.error(this, e.getMessage());
         } catch (RuntimeException e) {
-            // חריגה לא צפויה לא נבלעת ב-EDT בלי שהמנהל יודע שהסקר לא יצא
             LOG.log(Level.SEVERE, "יצירת הסקר נכשלה", e);
             Dialogs.error(this, "יצירת הסקר נכשלה בשגיאה לא צפויה. פרטים ביומן.");
         }
     }
 
-    /**
-     * הטקסט עצמו נבדק (ולא ערך ה-JSpinner), כי ה-JSpinner קוטע בשקט "3.5" ל-3.
-     * מותר רק מספר שלם בין 0 ל-MAX_DELAY_MINUTES.
-     */
+
     private Integer readValidatedDelayMinutes() {
         String raw = ((JSpinner.DefaultEditor) delaySpinner.getEditor()).getTextField().getText().trim();
         if (!raw.matches("\\d{1,3}") || Integer.parseInt(raw) > AppConfig.MAX_DELAY_MINUTES) {
