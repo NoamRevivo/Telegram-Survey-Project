@@ -21,6 +21,10 @@ final class SurveyJsonParser {
     private static final String KEY_QUESTIONS = "questions";
     private static final String KEY_TEXT = "text";
     private static final String KEY_OPTIONS = "options";
+    private static final String KEY_ERROR = "error";
+    private static final String KEY_CODE = "code";
+    private static final int ERROR_CODE_MISSING_TOKEN = 1024;
+    private static final int ERROR_CODE_INVALID_TOKEN = 1029;
 
     private SurveyJsonParser() {
     }
@@ -32,6 +36,10 @@ final class SurveyJsonParser {
             json = (JSONObject) wrapped;
         } else if (wrapped instanceof String) {
             json = parseJsonObject((String) wrapped);
+        }
+
+        if (json.optBoolean(KEY_ERROR, false)) {
+            throw serviceErrorException(json, responseBody);
         }
 
         JSONArray questionsArray = json.optJSONArray(KEY_QUESTIONS);
@@ -72,6 +80,24 @@ final class SurveyJsonParser {
             }
         }
         return new Question(text, options);
+    }
+
+    /**
+     * השירות מחזיר לעיתים HTTP 200 עם מעטפת שגיאה משלו ({"error": true, "code": N, ...})
+     * במקום שאלות. קוד 1024 נבדק אמפירית כ"חסר טוקן בבקשה" וקוד 1029 כ"טוקן שגוי" —
+     * שני הקודים האלה מתורגמים להודעה מפורשת, וכל קוד אחר מקבל הודעה כללית עם הקוד עצמו.
+     */
+    private static SurveyGenerationException serviceErrorException(JSONObject json, String responseBody) {
+        int code = json.optInt(KEY_CODE, -1);
+        String reason = switch (code) {
+            case ERROR_CODE_MISSING_TOKEN -> "השירות לא קיבל טוקן. בדוק שמשתנה הסביבה "
+                    + AppConfig.ENV_SURVEY_API_TOKEN + " מוגדר ושכתובת השירות תקינה.";
+            case ERROR_CODE_INVALID_TOKEN -> "הטוקן שנשלח לשירות אינו תקין. בדוק את הערך של משתנה הסביבה "
+                    + AppConfig.ENV_SURVEY_API_TOKEN + ".";
+            default -> "בדוק את משתנה הסביבה " + AppConfig.ENV_SURVEY_API_TOKEN + " ואת כתובת השירות.";
+        };
+        return new SurveyGenerationException(
+                "השירות החזיר שגיאה (קוד " + code + "). " + reason + " התקבל: " + snippet(responseBody));
     }
 
     private static JSONObject parseJsonObject(String raw) throws SurveyGenerationException {

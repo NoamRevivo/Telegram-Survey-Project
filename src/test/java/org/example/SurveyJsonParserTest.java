@@ -127,6 +127,38 @@ class SurveyJsonParserTest {
     }
 
     @Test
+    void failsWithSpecificMessageWhenServiceReportsMissingToken() {
+        String body = "{\"error\":true,\"code\":1024,\"logout\":false,\"language\":0,\"retryable\":false}";
+
+        SurveyGenerationException error = assertThrows(SurveyGenerationException.class,
+                () -> SurveyJsonParser.parse(body));
+
+        assertTrue(error.getMessage().contains("1024"));
+        assertTrue(error.getMessage().contains("טוקן"));
+    }
+
+    @Test
+    void failsWithSpecificMessageWhenServiceReportsInvalidToken() {
+        String body = "{\"error\":true,\"code\":1029}";
+
+        SurveyGenerationException error = assertThrows(SurveyGenerationException.class,
+                () -> SurveyJsonParser.parse(body));
+
+        assertTrue(error.getMessage().contains("1029"));
+        assertTrue(error.getMessage().contains("אינו תקין"));
+    }
+
+    @Test
+    void failsWithGenericMessageOnUnknownErrorCode() {
+        String body = "{\"error\":true,\"code\":9999}";
+
+        SurveyGenerationException error = assertThrows(SurveyGenerationException.class,
+                () -> SurveyJsonParser.parse(body));
+
+        assertTrue(error.getMessage().contains("9999"));
+    }
+
+    @Test
     void failsWhenQuestionsKeyIsMissing() {
         SurveyGenerationException error = assertThrows(SurveyGenerationException.class,
                 () -> SurveyJsonParser.parse("{\"answer\": \"hello\"}"));

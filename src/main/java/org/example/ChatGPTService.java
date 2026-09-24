@@ -32,6 +32,12 @@ public class ChatGPTService {
                 .build();
     }
 
+    /**
+     * שירות ה-API (shaitest-production) קורא את הטוקן מפרמטר ה-query בשם token ולא מכותרת
+     * ה-Authorization — נבדק אמפירית: בקשה בלי token בכלל מחזירה code 1024, ועם token שגוי
+     * code 1029. לכן הטוקן נשלח כאן בשני האופנים: כפרמטר, כדי שהשירות בפועל יזהה אותו, וגם
+     * ב-Authorization, כגיבוי אם השירות ישודרג בעתיד לקרוא ממנו.
+     */
     public GeneratedSurvey generateSurvey(String topic) throws SurveyGenerationException {
         if (token == null || token.isBlank()) {
             throw new SurveyGenerationException("חסר משתנה הסביבה "
@@ -47,6 +53,7 @@ public class ChatGPTService {
         }
         HttpUrl url = baseUrl.newBuilder()
                 .addQueryParameter("text", buildPrompt(topic))
+                .addQueryParameter("token", token)
                 .build();
         Request request = new Request.Builder()
                 .url(url)
