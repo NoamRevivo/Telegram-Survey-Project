@@ -1,0 +1,120 @@
+package org.example;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/**
+ * פירוק תשובת שירות יצירת השאלות — טהור, ללא HTTP, ולכן ניתן לבדיקה ישירה.
+ */
+final class SurveyJsonParser {
+    private static final Logger LOG = Logger.getLogger(SurveyJsonParser.class.getName());
+    private static final String CODE_FENCE = "```";
+    private static final String KEY_WRAPPER = "value";
+    private static final String KEY_QUESTIONS = "questions";
+    private static final String KEY_TEXT = "text";
+    private static final String KEY_OPTIONS = "options";
+
+    private SurveyJsonParser() {
+    }
+
+    static GeneratedSurvey parse(String responseBody) throws SurveyGenerationException {
+        JSONObject json = parseJsonObject(responseBody);
+        Object wrapped = json.opt(KEY_WRAPPER);
+        if (wrapped instanceof JSONObject) {
+            json = (JSONObject) wrapped;
+        } else if (wrapped instanceof String) {
+            json = parseJsonObject((String) wrapped);
+        }
+
+        JSONArray questionsArray = json.optJSONArray(KEY_QUESTIONS);
+        if (questionsArray == null) {
+            throw new SurveyGenerationException(
+                    "התשובה מהשירות אינה מכילה שאלות. התקבל: " + snippet(responseBody));
+        }
+
+        List<Question> questions = new ArrayList<>();
+        int skipped = 0;
+        for (int i = 0; i < questionsArray.length() && questions.size() < Survey.MAX_QUESTIONS; i++) {
+            try {
+                questions.add(parseQuestion(questionsArray.getJSONObject(i)));
+            } catch (RuntimeException e) {
+                skipped++;
+                LOG.log(Level.WARNING, "שאלה " + (i + 1) + " מהשירות דולגה: " + e.getMessage());
+            }
+        }
+        if (questions.isEmpty()) {
+            throw new SurveyGenerationException("לא התקבלה אף שאלה תקינה מהשירות.");
+        }
+        return new GeneratedSurvey(questions, skipped);
+    }
+
+    /**
+     * שדה text חסר, null או מספר זורק חריגה והשאלה נפסלת —
+     * String.valueOf היה הופך null למחרוזת «null» ומציג אותה למנהל כשאלה.
+     */
+    private static Question parseQuestion(JSONObject questionJson) {
+        String text = questionJson.getString(KEY_TEXT).trim();
+        JSONArray optionsArray = questionJson.getJSONArray(KEY_OPTIONS);
+        List<String> options = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (int j = 0; j < optionsArray.length() && options.size() < Question.MAX_OPTIONS; j++) {
+            String option = optionsArray.optString(j, "").trim();
+            if (!option.isEmpty() && seen.add(option.toLowerCase())) {
+                options.add(option);
+            }
+        }
+        return new Question(text, options);
+    }
+
+    private static JSONObject parseJsonObject(String raw) throws SurveyGenerationException {
+        String cleaned = extractJson(raw);
+        try {
+            return new JSONObject(cleaned);
+        } catch (JSONException e) {
+            throw new SurveyGenerationException(
+                    "התגובה מהשרת לא הייתה JSON תקין. תחילת התגובה שהתקבלה: \"" + snippet(raw) + "\"", e);
+        }
+    }
+
+    static String extractJson(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String text = raw.trim();
+        if (text.startsWith(CODE_FENCE)) {
+            int firstNewline = text.indexOf('\n');
+            if (firstNewline != -1) {
+                text = text.substring(firstNewline + 1);
+            }
+            int lastFence = text.lastIndexOf(CODE_FENCE);
+            if (lastFence != -1) {
+                text = text.substring(0, lastFence);
+            }
+            text = text.trim();
+        }
+        int start = text.indexOf('{');
+        int end = text.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            text = text.substring(start, end + 1);
+        }
+        return text;
+    }
+
+    static String snippet(String text) {
+        if (text == null || text.isBlank()) {
+            return "(תגובה ריקה)";
+        }
+        String trimmed = text.trim();
+        return trimmed.length() > AppConfig.RESPONSE_SNIPPET_LENGTH
+                ? trimmed.substring(0, AppConfig.RESPONSE_SNIPPET_LENGTH) + "..."
+                : trimmed;
+    }
+}
