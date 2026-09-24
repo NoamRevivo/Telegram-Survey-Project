@@ -197,7 +197,6 @@ public class TelegramGateway extends TelegramLongPollingBot implements MessageSe
                 } catch (RuntimeException e) {
                     LOG.log(Level.SEVERE, "משימה אסינכרונית נכשלה: " + description, e);
                 } catch (Error e) {
-                    // שגיאת JVM (זיכרון, מחסנית) אינה מוסתרת: נרשמת וממשיכה למעלה
                     LOG.log(Level.SEVERE, "שגיאה חמורה במשימה: " + description, e);
                     throw e;
                 }
