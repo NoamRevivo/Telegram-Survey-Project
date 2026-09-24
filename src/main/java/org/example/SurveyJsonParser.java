@@ -11,9 +11,7 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * פירוק תשובת שירות יצירת השאלות — טהור, ללא HTTP, ולכן ניתן לבדיקה ישירה.
- */
+
 final class SurveyJsonParser {
     private static final Logger LOG = Logger.getLogger(SurveyJsonParser.class.getName());
     private static final String CODE_FENCE = "```";
@@ -64,10 +62,7 @@ final class SurveyJsonParser {
         return new GeneratedSurvey(questions, skipped);
     }
 
-    /**
-     * שדה text חסר, null או מספר זורק חריגה והשאלה נפסלת —
-     * String.valueOf היה הופך null למחרוזת «null» ומציג אותה למנהל כשאלה.
-     */
+
     private static Question parseQuestion(JSONObject questionJson) {
         String text = questionJson.getString(KEY_TEXT).trim();
         JSONArray optionsArray = questionJson.getJSONArray(KEY_OPTIONS);
@@ -86,11 +81,7 @@ final class SurveyJsonParser {
         return new Question(text, options);
     }
 
-    /**
-     * השירות מחזיר לעיתים HTTP 200 עם מעטפת שגיאה משלו ({"error": true, "code": N, ...})
-     * במקום שאלות. קוד 1024 נבדק אמפירית כ"חסר טוקן בבקשה" וקוד 1029 כ"טוקן שגוי" —
-     * שני הקודים האלה מתורגמים להודעה מפורשת, וכל קוד אחר מקבל הודעה כללית עם הקוד עצמו.
-     */
+
     private static SurveyGenerationException serviceErrorException(JSONObject json, String responseBody) {
         int code = json.optInt(KEY_CODE, -1);
         String reason = switch (code) {

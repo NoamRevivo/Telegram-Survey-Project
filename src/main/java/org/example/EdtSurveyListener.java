@@ -3,10 +3,7 @@ package org.example;
 import javax.swing.SwingUtilities;
 import java.util.List;
 
-/**
- * מעביר כל אירוע סקר ל-EDT לפני שהוא מגיע ל-{@code delegate}.
- * ההעברה נעשית במקום אחד, כך שמסכי הממשק כותבים רק את לוגיקת התצוגה ואינם חוזרים על {@code invokeLater}.
- */
+
 final class EdtSurveyListener implements SurveyListener {
     private final SurveyListener delegate;
 

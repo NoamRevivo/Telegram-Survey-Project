@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** חברי הקהילה שהצטרפו לבוט. בטוח לשימוש מכמה חוטים; מאזינים מקבלים אירוע מחוץ למנעול. */
 public class CommunityManager {
     private final Map<Long, CommunityUser> members = new ConcurrentHashMap<>();
     private final Listeners<CommunityListener> listeners = new Listeners<>();
@@ -15,12 +14,10 @@ public class CommunityManager {
         listeners.add(listener);
     }
 
-    /** נקרא מ-MainFrame.dispose() — חלון שנסגר מפסיק לקבל אירועים. */
     public void removeListener(CommunityListener listener) {
         listeners.remove(listener);
     }
 
-    /** ההודעה למאזינים יוצאת מחוץ למנעול (copy-then-notify). */
     public boolean addMember(long telegramId, String firstName, String username) {
         CommunityUser user = new CommunityUser(telegramId, firstName, username);
         int size;
@@ -34,10 +31,7 @@ public class CommunityManager {
         return true;
     }
 
-    /**
-     * סדר הצטרפות יציב — ConcurrentHashMap.values() מחזיר סדר hash שרירותי,
-     * וכך אותה קהילה הוצגה בשני סדרים שונים בשתי לשוניות.
-     */
+
     public List<CommunityUser> getAllMembers() {
         List<CommunityUser> sorted = new ArrayList<>(members.values());
         sorted.sort(Comparator.comparingLong(CommunityUser::getJoinSequence));

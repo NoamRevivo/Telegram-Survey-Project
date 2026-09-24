@@ -2,7 +2,6 @@ package org.example;
 
 import javax.swing.SwingUtilities;
 
-/** מעביר אירועי קהילה ל-EDT — ראו {@link EdtSurveyListener}. */
 final class EdtCommunityListener implements CommunityListener {
     private final CommunityListener delegate;
 

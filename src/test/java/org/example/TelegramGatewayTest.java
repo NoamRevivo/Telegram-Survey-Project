@@ -14,7 +14,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** לוגיקת הניסיונות החוזרים והגיבוי של השער, בלי רשת ובלי המתנה אמיתית. */
 class TelegramGatewayTest {
 
     private static final class ScriptedGateway extends TelegramGateway {

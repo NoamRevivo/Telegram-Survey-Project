@@ -5,14 +5,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** חבר קהילה בתוך סקר מסוים: תשובותיו, התקדמותו ומצב ההפצה אליו. */
 public class SurveyParticipant {
     private final CommunityUser user;
     private volatile ParticipantStatus status;
     private volatile boolean unreachable;
     private final Map<String, String> answersByQuestionId = new ConcurrentHashMap<>();
 
-    /* מעקב הפצה: מה כבר נמסר לו — כדי שניסיון חוזר ישלח רק את מה שחסר ולא יכפיל הודעות */
     private volatile boolean introDelivered;
     private volatile int questionsDelivered;
     private volatile boolean deliveryFailed;
@@ -35,12 +33,10 @@ public class SurveyParticipant {
         return unreachable;
     }
 
-    /** ההודעות לא הגיעו אליו (חסם את הבוט וכו') — אינו חוסם סגירה מוקדמת ואינו מקבל תזכורת. */
     public void markUnreachable() {
         unreachable = true;
     }
 
-    /** ההפצה אליו נכשלה בכשל זמני/דחייה — אינו חסום, ולכן ננסה שוב לשלוח את מה שחסר. */
     public boolean isDeliveryFailed() {
         return deliveryFailed;
     }
@@ -64,8 +60,6 @@ public class SurveyParticipant {
     void markQuestionDelivered() {
         questionsDelivered++;
     }
-
-    /** מונע שתי משימות הפצה במקביל לאותו משתתף (הפצה מקורית וניסיון חוזר). */
     boolean tryBeginDelivery() {
         return deliveryInProgress.compareAndSet(false, true);
     }

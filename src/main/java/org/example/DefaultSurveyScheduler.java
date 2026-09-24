@@ -9,17 +9,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/**
- * המימוש האמיתי מעל ScheduledExecutorService.
- * כל משימה עטופה ב-try/catch — חריגה בטיק אינה מבטלת בשקט את התזמון.
- */
+
 public final class DefaultSurveyScheduler implements SurveyScheduler {
     private static final Logger LOG = Logger.getLogger(DefaultSurveyScheduler.class.getName());
 
     private final ScheduledExecutorService scheduler =
             Executors.newScheduledThreadPool(AppConfig.SCHEDULER_POOL_SIZE, new NamedThreadFactory("survey-timer"));
 
-    /** תזמון אחרי כיבוי (סגירת החלון) אינו זורק לקורא — פשוט אין מה לבטל. */
     private static final Cancellable NOTHING_TO_CANCEL = () -> { };
 
     @Override
@@ -72,7 +68,6 @@ public final class DefaultSurveyScheduler implements SurveyScheduler {
             } catch (RuntimeException e) {
                 LOG.log(Level.SEVERE, "משימת תזמון נכשלה", e);
             } catch (Error e) {
-                // שגיאת JVM אינה מוסתרת: נרשמת וממשיכה למעלה (משימה חוזרת תיעצר, וזה נכון יותר מריצה במצב לא בטוח)
                 LOG.log(Level.SEVERE, "שגיאה חמורה במשימת תזמון", e);
                 throw e;
             }

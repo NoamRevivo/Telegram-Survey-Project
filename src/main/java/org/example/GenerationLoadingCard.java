@@ -12,9 +12,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 
-/**
- * כרטיס ההמתנה לשירות יצירת השאלות: כותרת, פס התקדמות וספירת שניות שחלפו.
- */
+
 final class GenerationLoadingCard extends JPanel {
     private static final int TITLE_GAP = 10;
     private static final int BAR_GAP = 16;
@@ -67,7 +65,6 @@ final class GenerationLoadingCard extends JPanel {
         elapsedTimer.start();
     }
 
-    /** מעל דקה מוצג כ-m:ss, כדי ש-"חלפו 95 שניות" לא יראה כמו תקלה. */
     static String elapsedText(int seconds) {
         String elapsed = seconds < 60
                 ? seconds + " שניות"
