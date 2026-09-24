@@ -10,14 +10,29 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.SwingConstants;
+import javax.swing.border.Border;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.FlowLayout;
 import java.awt.Font;
 
 public final class UiFactory {
     private UiFactory() {
+    }
+
+    public static Border pagePadding() {
+        return BorderFactory.createEmptyBorder(
+                UiTheme.PAGE_PAD, UiTheme.PAGE_PAD, UiTheme.PAGE_PAD, UiTheme.PAGE_PAD);
+    }
+
+    public static JPanel actionsRow(JComponent... items) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.CENTER, UiTheme.GAP, UiTheme.GAP_SMALL));
+        for (JComponent item : items) {
+            row.add(item);
+        }
+        return row;
     }
 
     public static JPanel emptyState(Icon icon, String title, String hint) {

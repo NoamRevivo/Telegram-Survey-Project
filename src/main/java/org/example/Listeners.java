@@ -8,14 +8,17 @@ import java.util.logging.Logger;
 public final class Listeners<T> {
     private static final Logger LOG = Logger.getLogger(Listeners.class.getName());
     private final CopyOnWriteArrayList<T> listeners = new CopyOnWriteArrayList<>();
+
     public void add(T listener) {
         if (listener != null) {
             listeners.add(listener);
         }
     }
+
     public void remove(T listener) {
         listeners.remove(listener);
     }
+
     public void fire(Consumer<T> event) {
         for (T listener : listeners) {
             try {

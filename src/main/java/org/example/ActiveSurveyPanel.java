@@ -5,7 +5,6 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JTable;
@@ -18,7 +17,6 @@ import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
 import java.util.HashMap;
@@ -33,6 +31,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     private static final String STATUS_IN_PROGRESS = "בתהליך";
     private static final String STATUS_COMPLETED = "השלים";
     private static final String STATUS_MISSED = "לא השלים";
+    private static final String STATUS_UNREACHABLE = "לא נמסר";
 
     private final SurveyManager surveyManager;
 
@@ -47,6 +46,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     private final JLabel totalLabel = new JLabel("👥 סה\"כ משתתפים: 0");
     private final JLabel finishedLabel = new JLabel("✅ סיימו: 0");
     private final JLabel pendingLabel = new JLabel("⏳ טרם סיימו: 0");
+    private final JLabel unreachableLabel = new JLabel("🚫 לא נמסר: 0");
     private final DefaultTableModel tableModel;
     private final JTable table;
     private final Map<Long, Integer> rowByTelegramId = new HashMap<>();
@@ -66,7 +66,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         this.surveyManager = surveyManager;
 
         setLayout(new BorderLayout());
-        setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
+        setBorder(UiFactory.pagePadding());
 
         tableModel = UiFactory.readOnlyModel(new Object[]{"שם", "התקדמות", "סטטוס"});
         table = UiFactory.readOnlyTable(tableModel);
@@ -99,8 +99,8 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         countdownPanel.add(Box.createVerticalStrut(6));
         countdownPanel.add(UiFactory.centered(phaseNoteLabel));
 
-        JPanel statsPanel = new JPanel(new GridLayout(1, 3, 12, 10));
-        for (JLabel label : new JLabel[]{totalLabel, finishedLabel, pendingLabel}) {
+        JPanel statsPanel = new JPanel(new GridLayout(1, 4, 12, UiTheme.GAP));
+        for (JLabel label : new JLabel[]{totalLabel, finishedLabel, pendingLabel, unreachableLabel}) {
             label.setHorizontalAlignment(SwingConstants.CENTER);
             label.setFont(label.getFont().deriveFont(Font.BOLD, UiTheme.FONT_BODY));
             label.setBorder(BorderFactory.createCompoundBorder(
@@ -109,20 +109,18 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
             statsPanel.add(label);
         }
 
-        JPanel centerPanel = new JPanel(new BorderLayout(10, 10));
+        JPanel centerPanel = new JPanel(new BorderLayout(UiTheme.GAP, UiTheme.GAP));
         centerPanel.add(statsPanel, BorderLayout.NORTH);
         centerPanel.add(UiFactory.titledScroll("משתתפי הסקר", table), BorderLayout.CENTER);
 
         stopButton.setToolTipText("סוגר את הסקר מיד ומציג את התוצאות שנאספו עד כה");
         stopButton.setForeground(UiTheme.ERROR_RED);
         stopButton.addActionListener(e -> onStopSurvey());
-        JPanel actionsRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 6));
-        actionsRow.add(stopButton);
 
         JPanel card = new JPanel(new BorderLayout());
         card.add(countdownPanel, BorderLayout.NORTH);
         card.add(centerPanel, BorderLayout.CENTER);
-        card.add(actionsRow, BorderLayout.SOUTH);
+        card.add(UiFactory.actionsRow(stopButton), BorderLayout.SOUTH);
         return card;
     }
 
@@ -132,9 +130,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
                 ? "לבטל את הסקר לפני השליחה?\nהשאלות לא יישלחו לאף אחד ולא ייווצרו תוצאות."
                 : "לסגור את הסקר עכשיו?\nהתשובות שנאספו עד כה יישמרו ויוצגו בלשונית «תוצאות».";
         String title = cancelBeforeSending ? "ביטול סקר" : "סיום סקר";
-        int answer = JOptionPane.showConfirmDialog(this, message, title,
-                JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-        if (answer != JOptionPane.YES_OPTION) {
+        if (!Dialogs.confirm(this, title, message)) {
             return;
         }
         stopButton.setEnabled(false);
@@ -218,7 +214,6 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
             }
             stopButton.setEnabled(true);
             stopButton.setText("⏹ סיים סקר עכשיו");
-            // השעון מתחיל רק כשההפצה מסתיימת — עד אז אומרים את זה במפורש
             countdownLabel.setText("📤 שולח את השאלות…");
             countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
             phaseNoteLabel.setText("השאלות נשלחות למשתתפים — הספירה תתחיל כשכולם יקבלו אותן");
@@ -242,6 +237,19 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     }
 
     @Override
+    public void onParticipantUnreachable(SurveyParticipant participant) {
+        SwingUtilities.invokeLater(() -> {
+            Integer row = rowByTelegramId.get(participant.getUser().getTelegramId());
+            if (row != null && !participant.isCompleted()) {
+                tableModel.setValueAt(STATUS_UNREACHABLE, row, 2);
+            }
+            refreshStats();
+            Toast.show(this, "⚠ ההודעות לא הגיעו אל " + participant.getUser().getFirstName(),
+                    Toast.Type.WARNING);
+        });
+    }
+
+    @Override
     public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
         SwingUtilities.invokeLater(() -> {
             closedSurveyId = survey.getId();
@@ -255,7 +263,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
 
             for (SurveyParticipant p : participants) {
                 Integer row = rowByTelegramId.get(p.getUser().getTelegramId());
-                if (row != null && !p.isCompleted()) {
+                if (row != null && !p.isCompleted() && !p.isUnreachable()) {
                     tableModel.setValueAt(STATUS_MISSED, row, 2);
                 }
             }
@@ -282,6 +290,9 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         if (participant.isCompleted()) {
             return STATUS_COMPLETED;
         }
+        if (participant.isUnreachable()) {
+            return STATUS_UNREACHABLE;
+        }
         return participant.getAnsweredQuestionsCount() > 0 ? STATUS_IN_PROGRESS : STATUS_WAITING;
     }
 
@@ -290,9 +301,12 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
             return;
         }
         long finished = currentParticipants.stream().filter(SurveyParticipant::isCompleted).count();
+        long unreachable = currentParticipants.stream()
+                .filter(p -> p.isUnreachable() && !p.isCompleted()).count();
         totalLabel.setText("👥 סה\"כ משתתפים: " + currentParticipants.size());
         finishedLabel.setText("✅ סיימו: " + finished);
-        pendingLabel.setText("⏳ טרם סיימו: " + (currentParticipants.size() - finished));
+        pendingLabel.setText("⏳ טרם סיימו: " + (currentParticipants.size() - finished - unreachable));
+        unreachableLabel.setText("🚫 לא נמסר: " + unreachable);
     }
 
     private static class StatusRowRenderer extends DefaultTableCellRenderer {
@@ -305,7 +319,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
                 c.setBackground(UiTheme.ROW_COMPLETED);
             } else if (STATUS_IN_PROGRESS.equals(status)) {
                 c.setBackground(UiTheme.ROW_IN_PROGRESS);
-            } else if (STATUS_MISSED.equals(status)) {
+            } else if (STATUS_MISSED.equals(status) || STATUS_UNREACHABLE.equals(status)) {
                 c.setBackground(UiTheme.ROW_MISSED);
             } else {
                 c.setBackground(UiTheme.ROW_WAITING);

@@ -1,7 +1,12 @@
 package org.example;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.Icon;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.geom.Path2D;
 
 public final class AppIcons {
@@ -22,13 +27,21 @@ public final class AppIcons {
                 painter.paint(g2, size);
                 g2.dispose();
             }
-            @Override public int getIconWidth() { return size; }
-            @Override public int getIconHeight() { return size; }
+
+            @Override
+            public int getIconWidth() {
+                return size;
+            }
+
+            @Override
+            public int getIconHeight() {
+                return size;
+            }
         };
     }
 
     public static Icon community(int size) {
-        return badge(size, new Color(0x378ADD), (g, s) -> {
+        return badge(size, UiTheme.ICON_COMMUNITY, (g, s) -> {
             g.setColor(Color.WHITE);
             int r = s / 6;
             g.fillOval(s/2 - r*2 - r/2, s/2 - r, r*2, r*2);
@@ -38,7 +51,7 @@ public final class AppIcons {
     }
 
     public static Icon create(int size) {
-        return badge(size, new Color(0xBA7517), (g, s) -> {
+        return badge(size, UiTheme.ICON_CREATE, (g, s) -> {
             g.setColor(Color.WHITE);
             g.setStroke(new BasicStroke(s / 6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             g.drawLine(s/3, s*2/3, s*2/3, s/3);
@@ -52,7 +65,7 @@ public final class AppIcons {
     }
 
     public static Icon active(int size) {
-        return badge(size, new Color(0x0F6E56), (g, s) -> {
+        return badge(size, UiTheme.ICON_ACTIVE, (g, s) -> {
             g.setColor(Color.WHITE);
             int barWidth = s / 6;
             int gap = s / 10;
@@ -64,21 +77,27 @@ public final class AppIcons {
     }
 
     public static Icon live(int size) {
-        return badge(size, new Color(0xE24B4A), (g, s) -> { });
+        return badge(size, UiTheme.ICON_LIVE, (g, s) -> { });
     }
 
     public static Icon results(int size) {
-        return badge(size, new Color(0x854F0B), (g, s) -> {
+        return badge(size, UiTheme.ICON_RESULTS, (g, s) -> {
             g.setColor(Color.WHITE);
             Path2D star = new Path2D.Double();
-            double cx = s / 2.0, cy = s / 2.0;
-            double outerR = s * 0.4, innerR = s * 0.18;
+            double cx = s / 2.0;
+            double cy = s / 2.0;
+            double outerR = s * 0.4;
+            double innerR = s * 0.18;
             for (int i = 0; i < 10; i++) {
                 double angle = Math.PI / 2 + i * Math.PI / 5;
                 double r = (i % 2 == 0) ? outerR : innerR;
                 double px = cx + r * Math.cos(angle);
                 double py = cy - r * Math.sin(angle);
-                if (i == 0) star.moveTo(px, py); else star.lineTo(px, py);
+                if (i == 0) {
+                    star.moveTo(px, py);
+                } else {
+                    star.lineTo(px, py);
+                }
             }
             star.closePath();
             g.fill(star);

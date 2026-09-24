@@ -2,10 +2,12 @@ package org.example;
 
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
+import org.telegram.telegrambots.meta.api.objects.Chat;
 import org.telegram.telegrambots.meta.api.objects.Message;
 import org.telegram.telegrambots.meta.api.objects.User;
 
 import java.time.Duration;
+import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -14,7 +16,8 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
     private static final String COMMAND_START = "/start";
     private static final String COMMAND_HELP = "/help";
     private static final String[] JOIN_ALIASES = {COMMAND_START, "היי", "hi"};
-    private static final int CALLBACK_PARTS = 3;
+    private static final char COMMAND_PREFIX = '/';
+    private static final char BOT_MENTION = '@';
 
     private final CommunityManager communityManager;
     private final SurveyManager surveyManager;
@@ -39,31 +42,49 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
 
     @Override
     public void onMessage(Message message) {
+        Chat chat = message.getChat();
+        if (chat == null || !Boolean.TRUE.equals(chat.isUserChat())) {
+            return;
+        }
         User from = message.getFrom();
         if (from == null) {
             LOG.fine("התקבלה הודעה ללא שולח — מתעלם");
             return;
         }
-        String text = message.getText().trim();
+        String command = commandOf(message.getText());
         long chatId = message.getChatId();
 
-        if (isJoinCommand(text)) {
+        if (isJoinCommand(command)) {
             boolean added = communityManager.addMember(from.getId(), from.getFirstName(), from.getUserName());
             CommunityUser user = communityManager.getMember(from.getId());
             String displayName = user != null ? user.getFirstName() : safeName(from);
             gateway.sendText(chatId, added
                     ? MessageTemplates.welcome(displayName)
                     : MessageTemplates.alreadyMember(displayName, user == null ? null : user.getJoinedAt()));
-        } else if (text.equalsIgnoreCase(COMMAND_HELP)) {
+        } else if (command.equals(COMMAND_HELP)) {
             gateway.sendText(chatId, MessageTemplates.help());
         } else {
             gateway.sendText(chatId, MessageTemplates.unknownCommand());
         }
     }
 
-    private boolean isJoinCommand(String text) {
+    /**
+     * פקודת סלאש מגיעה לעיתים עם פרמטר (t.me/Bot?start=abc שולח "/start abc")
+     * או עם תיוג הבוט ("/start@BotName") — בשני המקרים הפקודה עצמה היא ההתחלה.
+     */
+    static String commandOf(String text) {
+        String trimmed = text == null ? "" : text.trim();
+        if (trimmed.isEmpty() || trimmed.charAt(0) != COMMAND_PREFIX) {
+            return trimmed.toLowerCase(Locale.ROOT);
+        }
+        String first = trimmed.split("\\s+", 2)[0];
+        int mention = first.indexOf(BOT_MENTION);
+        return (mention > 0 ? first.substring(0, mention) : first).toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isJoinCommand(String command) {
         for (String alias : JOIN_ALIASES) {
-            if (text.equalsIgnoreCase(alias)) {
+            if (command.equalsIgnoreCase(alias)) {
                 return true;
             }
         }
@@ -79,6 +100,10 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
         return (userName != null && !userName.isBlank()) ? "@" + userName : "חבר/ה";
     }
 
+    /**
+     * אישור הלחיצה עובר לתור נפרד וללא ניסיון חוזר: 429 עם retryAfter לא יחסום את חוט ה-polling,
+     * ואישור לחיצה שמגיע באיחור ממילא אינו מועיל למשתמש.
+     */
     @Override
     public void onCallback(CallbackQuery callbackQuery) {
         AnswerCallbackQuery feedback = new AnswerCallbackQuery();
@@ -90,18 +115,14 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
             LOG.log(Level.WARNING, "callback לא תקין: " + callbackQuery.getData(), e);
             feedback.setText(MessageTemplates.callbackFailed());
         } finally {
-            gateway.send(feedback);
+            gateway.runOnAckPool("אישור לחיצה", () -> gateway.sendOnce(feedback));
         }
     }
 
     private String resolveAnswer(CallbackQuery callbackQuery, AnswerCallbackQuery feedback) {
         User from = callbackQuery.getFrom();
-        String data = callbackQuery.getData();
+        CallbackData data = CallbackData.parse(callbackQuery.getData());
         if (from == null || data == null) {
-            return MessageTemplates.invalidButton();
-        }
-        String[] parts = data.split(":", CALLBACK_PARTS);
-        if (parts.length != CALLBACK_PARTS) {
             return MessageTemplates.invalidButton();
         }
 
@@ -109,41 +130,28 @@ public class TelegramBotService implements TelegramGateway.UpdateHandler {
         if (survey == null) {
             return MessageTemplates.surveyAlreadyOver();
         }
-        if (!survey.getId().equals(parts[0])) {
+        if (!survey.getId().equals(data.surveyId())) {
             return MessageTemplates.buttonFromOldSurvey();
         }
 
-        int questionIndex = parseIndex(parts[1]);
-        int optionIndex = parseIndex(parts[2]);
-        if (questionIndex < 0 || questionIndex >= survey.getQuestions().size()) {
-            return MessageTemplates.invalidButton();
-        }
-        Question question = survey.getQuestions().get(questionIndex);
-        if (optionIndex < 0 || optionIndex >= question.getOptions().size()) {
-            return MessageTemplates.invalidButton();
-        }
-
-        String chosenOption = question.getOptions().get(optionIndex);
-        SurveyManager.AnswerResult result =
-                surveyManager.recordAnswer(from.getId(), question.getId(), chosenOption);
-
+        SurveyManager.AnswerResult result = surveyManager.recordAnswer(
+                data.surveyId(), from.getId(), data.questionIndex(), data.optionIndex());
         if (result == SurveyManager.AnswerResult.RECORDED) {
-            if (callbackQuery.getMessage() instanceof Message message) {
-                notifier.markChosenAnswer(message.getChatId(), message.getMessageId(),
-                        question, chosenOption, questionIndex, survey.getQuestions().size());
-            }
+            markChosenAnswer(callbackQuery, survey, data);
         }
         feedback.setShowAlert(result != SurveyManager.AnswerResult.RECORDED);
         return MessageTemplates.answerFeedback(result);
     }
 
-    private int parseIndex(String raw) {
-        try {
-            return Integer.parseInt(raw);
-        } catch (NumberFormatException e) {
-            return -1;
+    private void markChosenAnswer(CallbackQuery callbackQuery, Survey survey, CallbackData data) {
+        if (callbackQuery.getMessage() instanceof Message message) {
+            Question question = survey.getQuestions().get(data.questionIndex());
+            String chosenOption = question.getOptions().get(data.optionIndex());
+            notifier.markChosenAnswer(message.getChatId(), message.getMessageId(),
+                    question, chosenOption, data.questionIndex(), survey.getQuestions().size());
         }
     }
+
     public void shutdownGracefully(Duration timeout) {
         gateway.shutdownGracefully(timeout);
     }

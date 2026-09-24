@@ -3,7 +3,6 @@ package org.example;
 import javax.swing.BorderFactory;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingConstants;
@@ -22,6 +21,12 @@ import java.awt.image.BufferedImage;
 import java.util.List;
 
 public class MainFrame extends JFrame {
+    private static final String TITLE_RESULTS = "תוצאות";
+    private static final String TITLE_RESULTS_LIVE = "תוצאות (חי)";
+    private static final String TITLE_RESULTS_NEW = "תוצאות ●";
+    private static final String TITLE_ACTIVE = "סקר פעיל";
+    private static final String TITLE_ACTIVE_LIVE = "סקר פעיל (חי)";
+
     private final JLabel statusBar = new JLabel();
     private final String botUsername;
 
@@ -47,7 +52,6 @@ public class MainFrame extends JFrame {
         this.communityManager = communityManager;
         this.surveyManager = surveyManager;
         this.botUsername = botUsername;
-        // המספר האמיתי כבר עכשיו — לא 0 שסותר את מסך יצירת הסקר
         this.communitySize = communityManager.getCommunitySize();
 
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
@@ -75,11 +79,12 @@ public class MainFrame extends JFrame {
 
         tabs.addTab("קהילה", AppIcons.community(UiTheme.ICON_TAB), communityPanel);
         tabs.addTab("יצירת סקר", AppIcons.create(UiTheme.ICON_TAB), creationPanel);
-        tabs.addTab("סקר פעיל", AppIcons.active(UiTheme.ICON_TAB), activeSurveyPanel);
-        tabs.addTab("תוצאות", AppIcons.results(UiTheme.ICON_TAB), resultsPanel);
+        tabs.addTab(TITLE_ACTIVE, AppIcons.active(UiTheme.ICON_TAB), activeSurveyPanel);
+        tabs.addTab(TITLE_RESULTS, AppIcons.results(UiTheme.ICON_TAB), resultsPanel);
+        tabs.addChangeListener(e -> clearNewResultsMarker());
 
-        statusBarListener = (newUser, newSize) -> SwingUtilities.invokeLater(() -> {
-            communitySize = newSize;
+        statusBarListener = (newUser, ignoredEventSize) -> SwingUtilities.invokeLater(() -> {
+            communitySize = communityManager.getCommunitySize();
             refreshStatusBar();
         });
         tabsListener = new TabsListener();
@@ -89,6 +94,7 @@ public class MainFrame extends JFrame {
         communityManager.addListener(statusBarListener);
         surveyManager.addSurveyListener(activeSurveyPanel);
         surveyManager.addSurveyListener(resultsPanel);
+        surveyManager.addSurveyListener(creationPanel);
         surveyManager.addSurveyListener(tabsListener);
 
         add(tabs, BorderLayout.CENTER);
@@ -97,21 +103,26 @@ public class MainFrame extends JFrame {
         UiTheme.applyRtl(getContentPane());
     }
 
-    /** אינדקס לפי הרכיב עצמו — לא קבוע ידני שנשבר בשקט כשמוסיפים לשונית. */
-    /** סגירת החלון באמצע סקר מסיימת אותו בלי הודעה למשתתפים — לכן מבקשים אישור. */
+    /**
+     * סגירת החלון באמצע סקר: המשתתפים מקבלים הודעה שהסקר נסגר, ולא נשארים ממתינים לסקר שנעלם.
+     * ההודעות נשלחות בתור העדיפות, ו-shutdownGracefully ממתין להן לפני הכיבוי.
+     */
     private void confirmAndExit() {
         if (surveyManager.isSurveyInProgress()) {
-            int choice = JOptionPane.showConfirmDialog(this,
-                    "יש סקר פעיל. סגירת התוכנה תפסיק אותו בלי הודעה למשתתפים, והתוצאות יאבדו.\nלסגור בכל זאת?",
-                    "סגירת התוכנה", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-            if (choice != JOptionPane.YES_OPTION) {
+            boolean confirmed = Dialogs.confirmWarning(this, "סגירת התוכנה",
+                    "יש סקר פעיל. סגירת התוכנה תסגור אותו, המשתתפים יקבלו הודעה שהסקר נסגר,"
+                            + " והתוצאות יאבדו.\nלסגור בכל זאת?");
+            if (!confirmed) {
                 return;
             }
+            surveyManager.cancelPendingSurvey();
+            surveyManager.closeSurvey();
         }
         dispose();
         System.exit(0);
     }
 
+    /** אינדקס לפי הרכיב עצמו — לא קבוע ידני שנשבר בשקט כשמוסיפים לשונית. */
     private int tabIndexOf(JPanel panel) {
         return tabs.indexOfComponent(panel);
     }
@@ -166,6 +177,7 @@ public class MainFrame extends JFrame {
         communityManager.removeListener(statusBarListener);
         surveyManager.removeSurveyListener(activeSurveyPanel);
         surveyManager.removeSurveyListener(resultsPanel);
+        surveyManager.removeSurveyListener(creationPanel);
         surveyManager.removeSurveyListener(tabsListener);
         super.dispose();
     }
@@ -178,8 +190,8 @@ public class MainFrame extends JFrame {
                 surveyActive = true;
                 int activeTab = tabIndexOf(activeSurveyPanel);
                 tabs.setIconAt(activeTab, AppIcons.live(UiTheme.ICON_TAB));
-                tabs.setTitleAt(activeTab, "סקר פעיל (חי)");
-                tabs.setTitleAt(tabIndexOf(resultsPanel), "תוצאות (חי)");
+                tabs.setTitleAt(activeTab, TITLE_ACTIVE_LIVE);
+                tabs.setTitleAt(tabIndexOf(resultsPanel), TITLE_RESULTS_LIVE);
                 refreshStatusBar();
             });
         }
@@ -189,7 +201,7 @@ public class MainFrame extends JFrame {
             SwingUtilities.invokeLater(() -> {
                 surveyActive = false;
                 resetTabTitles();
-                tabs.setSelectedIndex(tabIndexOf(resultsPanel));
+                revealResults();
                 refreshStatusBar();
             });
         }
@@ -207,8 +219,28 @@ public class MainFrame extends JFrame {
         private void resetTabTitles() {
             int activeTab = tabIndexOf(activeSurveyPanel);
             tabs.setIconAt(activeTab, AppIcons.active(UiTheme.ICON_TAB));
-            tabs.setTitleAt(activeTab, "סקר פעיל");
-            tabs.setTitleAt(tabIndexOf(resultsPanel), "תוצאות");
+            tabs.setTitleAt(activeTab, TITLE_ACTIVE);
+            tabs.setTitleAt(tabIndexOf(resultsPanel), TITLE_RESULTS);
+        }
+    }
+
+    /**
+     * המנהל שצופה בסקר עובר אוטומטית לתוצאות; מי שנמצא במסך אחר, למשל באמצע בניית סקר חדש,
+     * אינו נזרק ממנו — הלשונית רק מסומנת, והסימון נמחק כשנכנסים אליה.
+     */
+    private void revealResults() {
+        if (tabs.getSelectedComponent() == activeSurveyPanel) {
+            tabs.setSelectedIndex(tabIndexOf(resultsPanel));
+        } else {
+            tabs.setTitleAt(tabIndexOf(resultsPanel), TITLE_RESULTS_NEW);
+        }
+    }
+
+    private void clearNewResultsMarker() {
+        int resultsTab = tabIndexOf(resultsPanel);
+        if (resultsTab >= 0 && tabs.getSelectedIndex() == resultsTab
+                && TITLE_RESULTS_NEW.equals(tabs.getTitleAt(resultsTab))) {
+            tabs.setTitleAt(resultsTab, TITLE_RESULTS);
         }
     }
 

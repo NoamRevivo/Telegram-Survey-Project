@@ -1,7 +1,20 @@
 package org.example;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.BorderFactory;
+import javax.swing.DefaultListModel;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.swing.KeyStroke;
+import java.awt.BorderLayout;
+import java.awt.ComponentOrientation;
+import java.awt.Font;
+import java.awt.Frame;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,10 +30,9 @@ public class AddQuestionDialog extends JDialog {
 
     public AddQuestionDialog(Frame owner, Question existing) {
         super(owner, existing == null ? "➕ הוספת שאלה" : "✏️ עריכת שאלה", true);
-        // ברירת המחדל HIDE_ON_CLOSE מדליפה חלון בכל סגירה ב-X
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
-        ((JPanel) getContentPane()).setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
+        ((JPanel) getContentPane()).setBorder(UiFactory.pagePadding());
 
         JPanel top = new JPanel(new BorderLayout(6, 6));
         JLabel questionLabel = new JLabel("טקסט השאלה:");
@@ -34,11 +46,12 @@ public class AddQuestionDialog extends JDialog {
         Runnable addOption = () -> {
             String option = optionField.getText().trim();
             if (option.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "אפשרות ריקה אינה חוקית.");
+                Dialogs.warn(this, "אפשרות ריקה", "אפשרות ריקה אינה חוקית.");
             } else if (optionsModel.size() >= Question.MAX_OPTIONS) {
-                JOptionPane.showMessageDialog(this, "ניתן להזין עד " + Question.MAX_OPTIONS + " אפשרויות.");
+                Dialogs.warn(this, "מגבלת אפשרויות",
+                        "ניתן להזין עד " + Question.MAX_OPTIONS + " אפשרויות.");
             } else if (containsOption(option)) {
-                JOptionPane.showMessageDialog(this, "האפשרות \"" + option + "\" כבר קיימת.");
+                Dialogs.warn(this, "אפשרות כפולה", "האפשרות \"" + option + "\" כבר קיימת.");
             } else {
                 optionsModel.addElement(option);
                 optionField.setText("");
@@ -46,7 +59,7 @@ public class AddQuestionDialog extends JDialog {
             optionField.requestFocusInWindow();
         };
         addOptionButton.addActionListener(e -> addOption.run());
-        optionField.addActionListener(e -> addOption.run());   // Enter בשדה = הוספת אפשרות
+        optionField.addActionListener(e -> addOption.run());
         JButton removeOptionButton = new JButton("הסר אפשרות נבחרת");
         removeOptionButton.addActionListener(e -> {
             int index = optionsList.getSelectedIndex();
@@ -59,8 +72,7 @@ public class AddQuestionDialog extends JDialog {
         optionInputPanel.add(optionField, BorderLayout.CENTER);
         optionInputPanel.add(addOptionButton, BorderLayout.EAST);
 
-        JPanel optionButtonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 4));
-        optionButtonsPanel.add(removeOptionButton);
+        JPanel optionButtonsPanel = UiFactory.actionsRow(removeOptionButton);
 
         JPanel centerPanel = new JPanel(new BorderLayout(6, 6));
         centerPanel.setBorder(BorderFactory.createTitledBorder("אפשרויות תשובה"));
@@ -78,10 +90,7 @@ public class AddQuestionDialog extends JDialog {
         add(centerPanel, BorderLayout.CENTER);
         JButton cancelButton = new JButton("ביטול");
         cancelButton.addActionListener(e -> dispose());
-        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
-        buttonsPanel.add(confirmButton);
-        buttonsPanel.add(cancelButton);
-        add(buttonsPanel, BorderLayout.SOUTH);
+        add(UiFactory.actionsRow(confirmButton, cancelButton), BorderLayout.SOUTH);
 
         if (existing != null) {
             questionField.setText(existing.getText());
@@ -90,7 +99,6 @@ public class AddQuestionDialog extends JDialog {
             }
         }
 
-        // Enter מאשר, Esc סוגר, גודל לפי התוכן, ימין-לשמאל
         getRootPane().setDefaultButton(confirmButton);
         getRootPane().registerKeyboardAction(e -> dispose(),
                 KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -103,7 +111,7 @@ public class AddQuestionDialog extends JDialog {
     private void onConfirm() {
         String text = questionField.getText().trim();
         if (text.isEmpty() || optionsModel.size() < Question.MIN_OPTIONS) {
-            JOptionPane.showMessageDialog(this, "יש להזין טקסט שאלה ולפחות 2 אפשרויות תשובה.");
+            Dialogs.warn(this, "שאלה חסרה", "יש להזין טקסט שאלה ולפחות " + Question.MIN_OPTIONS + " אפשרויות תשובה.");
             return;
         }
         List<String> options = new ArrayList<>();
@@ -114,7 +122,7 @@ public class AddQuestionDialog extends JDialog {
             result = new Question(text, options);
             dispose();
         } catch (IllegalArgumentException e) {
-            JOptionPane.showMessageDialog(this, e.getMessage());
+            Dialogs.error(this, e.getMessage());
         }
     }
 
@@ -130,7 +138,7 @@ public class AddQuestionDialog extends JDialog {
     /** החלון משוחרר בכל מסלול יציאה — אישור, ביטול, Esc או X. */
     public Question showDialog() {
         try {
-            setVisible(true);   // מודאלי — חוסם עד סגירה
+            setVisible(true);
             return result;
         } finally {
             dispose();

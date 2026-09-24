@@ -34,6 +34,22 @@ class CoreModelTest {
     }
 
     @Test
+    void questionRejectsTextLongerThanTheLimit() {
+        String tooLong = "א".repeat(Question.MAX_TEXT_LENGTH + 1);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> new Question(tooLong, List.of("כן", "לא")));
+        assertTrue(error.getMessage().contains(String.valueOf(Question.MAX_TEXT_LENGTH)));
+    }
+
+    @Test
+    void questionAcceptsTextExactlyAtTheLimit() {
+        String atLimit = "א".repeat(Question.MAX_TEXT_LENGTH);
+
+        assertEquals(Question.MAX_TEXT_LENGTH, new Question(atLimit, List.of("כן", "לא")).getText().length());
+    }
+
+    @Test
     void communityUserFallsBackWhenNameIsMissing() {
         CommunityUser user = new CommunityUser(7L, null, null);
 

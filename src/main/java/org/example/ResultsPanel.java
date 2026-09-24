@@ -152,7 +152,6 @@ public class ResultsPanel extends JPanel implements SurveyListener {
         summaryLabel.setText(buildSummaryText());
 
         for (QuestionView view : questionViews) {
-            // מיון לפי שכיחות רק בתוצאות הסופיות — בזמן הסקר הסדר יציב
             view.refresh(participants, surveyClosed);
         }
     }
@@ -213,7 +212,6 @@ public class ResultsPanel extends JPanel implements SurveyListener {
                 row.add(optionLabel, BorderLayout.WEST);
                 row.add(bar, BorderLayout.CENTER);
                 row.setAlignmentX(Component.LEFT_ALIGNMENT);
-                // הרווח בין השורות הוא חלק מהשורה עצמה, לא Strut נפרד שיישאר מאחור בעת מיון
                 row.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
 
                 panel.add(row);
@@ -274,7 +272,7 @@ public class ResultsPanel extends JPanel implements SurveyListener {
             for (String option : ordered) {
                 JComponent row = rowsByOption.get(option);
                 panel.remove(row);
-                panel.add(row);   // מוסיף בסוף → מתקבל סדר יורד
+                panel.add(row);
             }
             panel.revalidate();
             panel.repaint();

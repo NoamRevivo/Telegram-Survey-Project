@@ -21,6 +21,7 @@ import java.util.Set;
 public class CommunityPanel extends JPanel implements CommunityListener {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
+    private final CommunityManager communityManager;
     private final JLabel totalMembersLabel;
     private final DefaultTableModel tableModel;
     private final JTable table;
@@ -29,8 +30,9 @@ public class CommunityPanel extends JPanel implements CommunityListener {
     private final Timer highlightTimer;
 
     public CommunityPanel(CommunityManager communityManager) {
-        setLayout(new BorderLayout(10, 10));
-        setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
+        this.communityManager = communityManager;
+        setLayout(new BorderLayout(UiTheme.GAP, UiTheme.GAP));
+        setBorder(UiFactory.pagePadding());
 
         totalMembersLabel = UiFactory.styled(
                 new JLabel("👥  סה\"כ חברים בקהילה: 0", SwingConstants.CENTER),
@@ -48,14 +50,14 @@ public class CommunityPanel extends JPanel implements CommunityListener {
         for (CommunityUser user : communityManager.getAllMembers()) {
             addRow(user);
         }
-        updateTotalLabel(communityManager.getCommunitySize());
+        updateTotalLabel();
     }
 
     @Override
     public void onMemberAdded(CommunityUser newUser, int newCommunitySize) {
         SwingUtilities.invokeLater(() -> {
             boolean added = addRow(newUser);
-            updateTotalLabel(newCommunitySize);
+            updateTotalLabel();
             if (added) {
                 highlightNewRow();
                 Toast.show(this, MessageTemplates.joinToast(newUser), Toast.Type.INFO);
@@ -75,8 +77,8 @@ public class CommunityPanel extends JPanel implements CommunityListener {
         return true;
     }
 
-    private void updateTotalLabel(int communitySize) {
-        totalMembersLabel.setText("👥  סה\"כ חברים בקהילה: " + communitySize);
+    private void updateTotalLabel() {
+        totalMembersLabel.setText("👥  סה\"כ חברים בקהילה: " + communityManager.getCommunitySize());
     }
 
     private Timer createHighlightTimer() {

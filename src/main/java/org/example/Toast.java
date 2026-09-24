@@ -1,7 +1,22 @@
 package org.example;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.BorderFactory;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JWindow;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.IllegalComponentStateException;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
+import java.awt.Window;
 import java.util.logging.Logger;
 
 /**

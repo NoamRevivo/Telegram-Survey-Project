@@ -10,6 +10,7 @@ import java.util.UUID;
 public class Question {
     public static final int MIN_OPTIONS = 2;
     public static final int MAX_OPTIONS = 4;
+    public static final int MAX_TEXT_LENGTH = 300;
 
     private final String id;
     private final String text;
@@ -18,6 +19,10 @@ public class Question {
     public Question(String text, List<String> options) {
         if (text == null || text.isBlank()) {
             throw new IllegalArgumentException("שאלה לא יכולה להיות ריקה");
+        }
+        if (text.trim().length() > MAX_TEXT_LENGTH) {
+            throw new IllegalArgumentException(
+                    "נוסח השאלה ארוך מדי (עד " + MAX_TEXT_LENGTH + " תווים)");
         }
         if (options == null || options.size() < MIN_OPTIONS || options.size() > MAX_OPTIONS) {
             throw new IllegalArgumentException(

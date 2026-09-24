@@ -58,7 +58,7 @@ public class BotNotifier implements CommunityListener, SurveyListener {
             long chatId = participant.getUser().getTelegramId();
             gateway.runOnNotificationPool("שליחת סקר ל-" + chatId, () -> {
                 try {
-                    if (!sendSurveyTo(chatId, survey)) {
+                    if (sendSurveyTo(chatId, survey) == TelegramGateway.SendResult.BLOCKED) {
                         surveyManager.markUnreachable(surveyId, chatId);
                     }
                 } finally {
@@ -70,35 +70,44 @@ public class BotNotifier implements CommunityListener, SurveyListener {
         }
     }
 
-    /** @return true אם כל ההודעות נמסרו; מפסיק לשלוח ברגע שהסקר נסגר. */
-    private boolean sendSurveyTo(long chatId, Survey survey) {
+    /**
+     * רק חסימה אמיתית (403) הופכת משתתף ל«לא ניתן להשגה».
+     * תקלת רשת רגעית או טקסט שטלגרם דחה אינם מוציאים אותו מהסקר.
+     *
+     * @return התוצאה הראשונה שאינה DELIVERED, או DELIVERED אם הכול נמסר; מפסיק ברגע שהסקר נסגר
+     */
+    private TelegramGateway.SendResult sendSurveyTo(long chatId, Survey survey) {
         if (!surveyManager.isActive(survey.getId())) {
-            return true;
+            return TelegramGateway.SendResult.DELIVERED;
         }
         List<Question> questions = survey.getQuestions();
-        if (!gateway.sendText(chatId, MessageTemplates.surveyIntro(questions.size()))) {
-            return false;
+        TelegramGateway.SendResult intro =
+                gateway.trySendText(chatId, MessageTemplates.surveyIntro(questions.size()));
+        if (intro != TelegramGateway.SendResult.DELIVERED) {
+            return intro;
         }
         gateway.sleepMillis(AppConfig.INTRO_DELAY_MILLIS);
         for (int index = 0; index < questions.size(); index++) {
             if (!surveyManager.isActive(survey.getId())) {
-                return true;
+                return TelegramGateway.SendResult.DELIVERED;
             }
-            if (!sendQuestion(chatId, survey.getId(), questions.get(index), index, questions.size())) {
-                return false;
+            TelegramGateway.SendResult sent =
+                    sendQuestion(chatId, survey.getId(), questions.get(index), index, questions.size());
+            if (sent != TelegramGateway.SendResult.DELIVERED) {
+                return sent;
             }
             gateway.sleepMillis(AppConfig.QUESTION_DELAY_MILLIS);
         }
-        return true;
+        return TelegramGateway.SendResult.DELIVERED;
     }
 
-    private boolean sendQuestion(long chatId, String surveyId, Question question,
-                                 int questionIndex, int totalQuestions) {
+    private TelegramGateway.SendResult sendQuestion(long chatId, String surveyId, Question question,
+                                                    int questionIndex, int totalQuestions) {
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
         message.setText(MessageTemplates.questionHeader(questionIndex, totalQuestions) + question.getText());
         message.setReplyMarkup(buildKeyboardFor(surveyId, question, questionIndex));
-        return gateway.send(message);
+        return gateway.trySend(message);
     }
 
     private InlineKeyboardMarkup buildKeyboardFor(String surveyId, Question question, int questionIndex) {
@@ -108,8 +117,7 @@ public class BotNotifier implements CommunityListener, SurveyListener {
         for (int optionIndex = 0; optionIndex < options.size(); optionIndex++) {
             InlineKeyboardButton button = new InlineKeyboardButton();
             button.setText(options.get(optionIndex));
-            // מזהה הסקר ב-callback_data — כפתור של סקר קודם מזוהה ונדחה
-            button.setCallbackData(surveyId + ":" + questionIndex + ":" + optionIndex);
+            button.setCallbackData(CallbackData.encode(surveyId, questionIndex, optionIndex));
 
             List<InlineKeyboardButton> row = new ArrayList<>();
             row.add(button);

@@ -16,6 +16,10 @@ public interface SurveyListener {
     default void onAnswerRecorded(SurveyParticipant participant) {
     }
 
+    /** ההודעות לא הגיעו למשתתף (חסם את הבוט) — הוא אינו חוסם סגירה ואינו מקבל תזכורת. */
+    default void onParticipantUnreachable(SurveyParticipant participant) {
+    }
+
     default void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
     }
 

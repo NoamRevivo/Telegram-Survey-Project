@@ -6,7 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SurveyManager {
-    public enum AnswerResult { RECORDED, SURVEY_NOT_ACTIVE, ALREADY_ANSWERED, UNKNOWN_PARTICIPANT }
+    public enum AnswerResult { RECORDED, SURVEY_NOT_ACTIVE, ALREADY_ANSWERED, UNKNOWN_PARTICIPANT, INVALID_ANSWER }
+
+    private static final long ANY_GENERATION = -1L;
 
     private final CommunityManager communityManager;
     private final SurveyScheduler scheduler;
@@ -41,9 +43,9 @@ public class SurveyManager {
             }
             Survey survey = new Survey(questions, delayMinutes);
             state = new SurveyState(survey, ++generationCounter);
-            startImmediately = delayMinutes <= 0;
+            startImmediately = survey.getDelayMinutes() <= 0;
             if (!startImmediately) {
-                startCountdown(delayMinutes);
+                startCountdown(survey.getDelayMinutes());
             }
         }
         if (startImmediately) {
@@ -126,7 +128,9 @@ public class SurveyManager {
      * אם כל השאר כבר סיימו — הסקר נסגר מיד.
      */
     public void markUnreachable(String surveyId, long telegramId) {
+        SurveyParticipant newlyUnreachable = null;
         boolean closeNow;
+        long generation;
         synchronized (this) {
             if (!isActive(surveyId)) {
                 return;
@@ -135,11 +139,19 @@ public class SurveyManager {
             if (participant == null) {
                 return;
             }
-            participant.markUnreachable();
+            if (!participant.isUnreachable()) {
+                participant.markUnreachable();
+                newlyUnreachable = participant;
+            }
             closeNow = state.anyCompleted() && state.allCompleted();
+            generation = state.generation();
+        }
+        if (newlyUnreachable != null) {
+            SurveyParticipant unreachable = newlyUnreachable;
+            listeners.fire(l -> l.onParticipantUnreachable(unreachable));
         }
         if (closeNow) {
-            closeSurvey();
+            closeSurvey(generation);
         }
     }
 
@@ -155,12 +167,11 @@ public class SurveyManager {
 
         deadlineMillis = scheduler.nowMillis() + AppConfig.SURVEY_DURATION_SECONDS * 1000L;
         countdownTask = scheduler.scheduleTicks(() -> onActiveTick(generation), Duration.ofSeconds(1));
-        // תזכורת יחידה בלבד — נשלחת AppConfig.REMINDER_DELAY_SECONDS (3 דקות) מתחילת הסקר
         reminderTask = scheduler.scheduleOnce(
                 () -> sendRemindersIfNeeded(generation),
                 Duration.ofSeconds(AppConfig.REMINDER_DELAY_SECONDS));
         timeoutTask = scheduler.scheduleOnce(
-                this::closeSurvey, Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS));
+                () -> closeSurvey(generation), Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS));
     }
 
     /** מעוגל כלפי מעלה, כך שטיק שהתעכב לא מדלג על שניות בתצוגה. */
@@ -182,36 +193,60 @@ public class SurveyManager {
         listeners.fire(l -> l.onCountdownTick(surveyId, left, false));
     }
 
-    public AnswerResult recordAnswer(long telegramId, String questionId, String answer) {
+    /**
+     * האימות מתבצע כולו בתוך המנעול, מול הסקר שמזההו התקבל: אין חלון שבו הסקר מתחלף
+     * בין הבדיקה לרישום, והתשובה נגזרת מאינדקס האפשרות — מחרוזת לא חוקית אינה יכולה להיקלט.
+     */
+    public AnswerResult recordAnswer(String surveyId, long telegramId, int questionIndex, int optionIndex) {
         SurveyParticipant participant;
         boolean everyoneFinished;
+        long generation;
         synchronized (this) {
-            if (state == null || state.status() != SurveyStatus.ACTIVE) {
+            if (!isActive(surveyId)) {
                 return AnswerResult.SURVEY_NOT_ACTIVE;
+            }
+            List<Question> questions = state.survey().getQuestions();
+            if (questionIndex < 0 || questionIndex >= questions.size()) {
+                return AnswerResult.INVALID_ANSWER;
+            }
+            Question question = questions.get(questionIndex);
+            if (optionIndex < 0 || optionIndex >= question.getOptions().size()) {
+                return AnswerResult.INVALID_ANSWER;
             }
             participant = state.find(telegramId);
             if (participant == null) {
                 return AnswerResult.UNKNOWN_PARTICIPANT;
             }
-            if (participant.hasAnswered(questionId)) {
+            if (participant.hasAnswered(question.getId())) {
                 return AnswerResult.ALREADY_ANSWERED;
             }
-            participant.recordAnswer(questionId, answer, state.survey().getQuestions().size());
+            participant.recordAnswer(question.getId(), question.getOptions().get(optionIndex), questions.size());
             everyoneFinished = state.allCompleted();
+            generation = state.generation();
         }
         SurveyParticipant recorded = participant;
         listeners.fire(l -> l.onAnswerRecorded(recorded));
         if (everyoneFinished) {
-            closeSurvey();
+            closeSurvey(generation);
         }
         return AnswerResult.RECORDED;
     }
 
     public void closeSurvey() {
+        closeSurvey(ANY_GENERATION);
+    }
+
+    /**
+     * משימה שנקבעה לסקר מסוים סוגרת רק אותו: סקר חדש שהחליף אותו בינתיים אינו נסגר בטעות.
+     */
+    private void closeSurvey(long expectedGeneration) {
         Survey closed;
         List<SurveyParticipant> snapshot;
         synchronized (this) {
             if (state == null || state.status() != SurveyStatus.ACTIVE) {
+                return;
+            }
+            if (expectedGeneration != ANY_GENERATION && state.generation() != expectedGeneration) {
                 return;
             }
             cancelAllTasks();

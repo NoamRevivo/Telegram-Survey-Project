@@ -6,7 +6,6 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.BotSession;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
-import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import java.util.logging.Level;
@@ -83,8 +82,7 @@ public class Main {
 
     private static void showFatal(String message) {
         try {
-            SwingUtilities.invokeAndWait(() ->
-                    JOptionPane.showMessageDialog(null, message, "שגיאה בהפעלה", JOptionPane.ERROR_MESSAGE));
+            SwingUtilities.invokeAndWait(() -> Dialogs.error(null, "שגיאה בהפעלה", message));
         } catch (Exception e) {
             LOG.log(Level.SEVERE, message, e);
         }

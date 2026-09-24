@@ -59,7 +59,7 @@ mvn test                   # בדיקות בלבד
 5. הסקר נסגר כשכולם סיימו, כשהזמן נגמר, או בלחיצה על **סיים סקר עכשיו**.
    בסגירה התוצאות ממוינות לפי שכיחות בסדר יורד.
 
-פקודות הבוט: `/start` להצטרפות, `/help` לעזרה.
+פקודות הבוט: `/start` להצטרפות, `/help` לעזרה. הבוט מגיב בשיחה פרטית בלבד, ו-`/start abc` או `/start@BotName` מזוהות כ-`/start`.
 
 ---
 
@@ -73,7 +73,9 @@ mvn test                   # בדיקות בלבד
 | +3:00 | תזכורת אישית אחת בלבד, למי שטרם סיים (לכל היותר פעם אחת לכל סקר) |
 | +5:00 | הסקר נסגר אוטומטית |
 
-הערכים מוגדרים ב-`AppConfig`. משתתף שההודעות לא הגיעו אליו (למשל חסם את הבוט) אינו חוסם סגירה מוקדמת ואינו מקבל תזכורת.
+הערכים מוגדרים ב-`AppConfig`. משתתף שההודעות לא הגיעו אליו (חסם את הבוט — קוד 403) מסומן בלשונית **סקר פעיל** כ«לא נמסר»,
+אינו חוסם סגירה מוקדמת ואינו מקבל תזכורת. תקלת רשת רגעית נוסתה שוב עם המתנה גדלה ואינה מסמנת משתתף כך.
+כשהמנהל סוגר את התוכנה באמצע סקר, המשתתפים מקבלים הודעה שהסקר נסגר.
 
 ---
 
@@ -83,9 +85,14 @@ mvn test                   # בדיקות בלבד
 mvn test
 ```
 
-26 בדיקות יחידה המכסות את לוגיקת הסקר, התזמון וניהול הקהילה —
+68 בדיקות יחידה המכסות את לוגיקת הסקר, התזמון וניהול הקהילה —
 כולל מניעת מרוץ בין הטיק האחרון לסגירת הסקר, תזכורות למי שטרם סיים,
-ביטול סקר בשלב ההמתנה, משתתף שלא ניתן להשיג, דיווח הפצה מאוחר של סקר קודם, והפרדת הרשויות בין חברי קהילה למשתתפי סקר.
+ביטול סקר בשלב ההמתנה, משתתף שלא ניתן להשיג, דיווח הפצה מאוחר של סקר קודם,
+והפרדת הרשויות בין חברי קהילה למשתתפי סקר.
+בנוסף: 300 משתתפים שעונים במקביל (900 תשובות, כל אחת נרשמת בדיוק פעם אחת),
+אימות אינדקסים בתוך המנעול, טיימאאוט של סקר קודם שאינו סוגר את הסקר הבא,
+פירוק תשובת ChatGPT (`SurveyJsonParser`), פירוק ה-callback (`CallbackData`),
+פקודות עם פרמטר או תיוג בוט, והפצת ההודעות ב-`BotNotifier` מול שער טלגרם מדומה.
 
 ---
 
@@ -95,9 +102,12 @@ mvn test
 org.example
 ├── ליבה        Survey · Question · SurveyParticipant · CommunityUser · SurveyState
 ├── ניהול       SurveyManager · CommunityManager · SurveyScheduler · Listeners<T>
-├── טלגרם       TelegramGateway · TelegramBotService · BotNotifier · MessageTemplates
+├── טלגרם       TelegramGateway (SendResult) · TelegramBotService · BotNotifier ·
+│               CallbackData · MessageTemplates
+├── ChatGPT     ChatGPTService (HTTP) · SurveyJsonParser (פירוק בלבד) · GeneratedSurvey
 ├── ממשק        MainFrame · CommunityPanel · SurveyCreationPanel · ActiveSurveyPanel ·
-│               ResultsPanel · AddQuestionDialog · Toast · UiFactory · UiTheme
+│               ResultsPanel · AddQuestionDialog · GenerationLoadingCard ·
+│               QuestionGenerationController · Toast · UiFactory · Dialogs · UiTheme
 └── תצורה       AppConfig
 ```
 

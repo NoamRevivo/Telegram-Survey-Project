@@ -1,7 +1,8 @@
 package org.example;
+
 import java.util.Collections;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SurveyParticipant {
     private final CommunityUser user;
@@ -14,14 +15,26 @@ public class SurveyParticipant {
         this.status = ParticipantStatus.NOT_STARTED;
     }
 
-    public CommunityUser getUser() { return user;}
-    public ParticipantStatus getStatus() { return status; }
-    public boolean isUnreachable() { return unreachable; }
+    public CommunityUser getUser() {
+        return user;
+    }
+
+    public ParticipantStatus getStatus() {
+        return status;
+    }
+
+    public boolean isUnreachable() {
+        return unreachable;
+    }
 
     /** ההודעות לא הגיעו אליו (חסם את הבוט וכו') — אינו חוסם סגירה מוקדמת ואינו מקבל תזכורת. */
-    public void markUnreachable() { unreachable = true; }
+    public void markUnreachable() {
+        unreachable = true;
+    }
 
-    public int getAnsweredQuestionsCount() { return answersByQuestionId.size(); }
+    public int getAnsweredQuestionsCount() {
+        return answersByQuestionId.size();
+    }
 
     public boolean hasAnswered(String questionId) {
         return answersByQuestionId.containsKey(questionId);

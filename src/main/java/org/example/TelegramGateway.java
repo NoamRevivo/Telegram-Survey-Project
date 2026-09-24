@@ -21,6 +21,14 @@ import java.util.logging.Logger;
  * היא אינה יודעת דבר על סקרים, קהילה או ניסוחים.
  */
 public class TelegramGateway extends TelegramLongPollingBot {
+    /** תוצאת שליחה מפורטת — הקורא מבדיל בין חסימה קבועה לבין תקלה זמנית. */
+    public enum SendResult {
+        DELIVERED,
+        BLOCKED,
+        REJECTED,
+        TRANSIENT_FAILURE
+    }
+
     /** מי שמטפל בעדכונים הנכנסים — הפרדה בין התעבורה לבין הלוגיקה. */
     public interface UpdateHandler {
         void onMessage(Message message);
@@ -28,7 +36,13 @@ public class TelegramGateway extends TelegramLongPollingBot {
         void onCallback(CallbackQuery callbackQuery);
     }
 
+    private record Outcome(SendResult result, Integer retryAfterSeconds) {
+    }
+
     private static final Logger LOG = Logger.getLogger(TelegramGateway.class.getName());
+    private static final int CODE_BAD_REQUEST = 400;
+    private static final int CODE_FORBIDDEN = 403;
+    private static final long MILLIS_PER_SECOND = 1000L;
 
     private final String botUsername;
     private final String botToken;
@@ -38,6 +52,7 @@ public class TelegramGateway extends TelegramLongPollingBot {
     private final ExecutorService notificationExecutor =
             Executors.newFixedThreadPool(AppConfig.NOTIFICATION_POOL_SIZE);
     private final ExecutorService priorityExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService ackExecutor = Executors.newFixedThreadPool(AppConfig.ACK_POOL_SIZE);
 
     public TelegramGateway(String botUsername, String botToken, UpdateHandler handler) {
         this.botUsername = botUsername;
@@ -70,39 +85,81 @@ public class TelegramGateway extends TelegramLongPollingBot {
     }
 
     public boolean sendText(long chatId, String text) {
+        return trySendText(chatId, text) == SendResult.DELIVERED;
+    }
+
+    public SendResult trySendText(long chatId, String text) {
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
         message.setText(text);
-        return send(message);
+        return trySend(message);
+    }
+
+    public boolean send(BotApiMethod<?> method) {
+        return trySend(method) == SendResult.DELIVERED;
     }
 
     /**
-     * שליחה עם ניסיון חוזר אחד כשטלגרם מחזיר 429 עם retryAfter.
-     *
-     * @return האם ההודעה נמסרה — הקורא מחליט מה לעשות בכישלון
+     * שליחה עם ניסיונות חוזרים על כישלון זמני בלבד (429, 5xx, תקלת רשת), עם המתנה גדלה.
+     * חסימה של המשתתף (403) ותוכן פסול (400) אינם נחזרים — ניסיון נוסף לא ישנה אותם.
      */
-    public boolean send(BotApiMethod<?> method) {
+    public SendResult trySend(BotApiMethod<?> method) {
+        for (int attempt = 1; attempt <= AppConfig.SEND_MAX_ATTEMPTS; attempt++) {
+            if (Thread.currentThread().isInterrupted()) {
+                return SendResult.TRANSIENT_FAILURE;
+            }
+            Outcome outcome = attemptOnce(method);
+            if (outcome.result() != SendResult.TRANSIENT_FAILURE) {
+                return outcome.result();
+            }
+            if (attempt == AppConfig.SEND_MAX_ATTEMPTS) {
+                break;
+            }
+            long wait = backoffMillis(outcome.retryAfterSeconds(), attempt);
+            if (wait > AppConfig.SEND_MAX_BACKOFF_MILLIS) {
+                LOG.warning("טלגרם ביקש להמתין יותר מהתקרה (" + wait + " מילישניות) — מוותר על ההודעה");
+                break;
+            }
+            LOG.warning("שליחה נכשלה זמנית (ניסיון " + attempt + " מתוך "
+                    + AppConfig.SEND_MAX_ATTEMPTS + "), ממתין " + wait + " מילישניות");
+            sleepMillis(wait);
+        }
+        return SendResult.TRANSIENT_FAILURE;
+    }
+
+    /** ניסיון יחיד ללא המתנה — לאישורי לחיצה, שאסור שיחסמו את חוט ה-polling. */
+    public SendResult sendOnce(BotApiMethod<?> method) {
+        return attemptOnce(method).result();
+    }
+
+    private Outcome attemptOnce(BotApiMethod<?> method) {
         try {
             execute(method);
-            return true;
+            return new Outcome(SendResult.DELIVERED, null);
         } catch (TelegramApiRequestException e) {
-            Integer retryAfter = e.getParameters() != null ? e.getParameters().getRetryAfter() : null;
-            if (retryAfter != null && retryAfter > 0) {
-                LOG.warning("הגעה למגבלת קצב טלגרם, ממתין " + retryAfter + " שניות ומנסה שוב...");
-                sleepMillis(retryAfter * 1000L);
-                try {
-                    execute(method);
-                    return true;
-                } catch (TelegramApiException retryEx) {
-                    LOG.log(Level.WARNING, "שליחת הודעה נכשלה גם בניסיון החוזר", retryEx);
-                }
-            } else {
-                LOG.log(Level.WARNING, "שליחת הודעה בטלגרם נכשלה", e);
+            Integer code = e.getErrorCode();
+            if (code != null && code == CODE_FORBIDDEN) {
+                LOG.log(Level.INFO, "ההודעה לא נמסרה: המשתמש חסם את הבוט או עזב את השיחה");
+                return new Outcome(SendResult.BLOCKED, null);
             }
+            if (code != null && code == CODE_BAD_REQUEST) {
+                LOG.log(Level.WARNING, "טלגרם דחה את ההודעה (תוכן או יעד לא תקינים)", e);
+                return new Outcome(SendResult.REJECTED, null);
+            }
+            Integer retryAfter = e.getParameters() != null ? e.getParameters().getRetryAfter() : null;
+            LOG.log(Level.WARNING, "שליחת הודעה בטלגרם נכשלה, קוד " + code, e);
+            return new Outcome(SendResult.TRANSIENT_FAILURE, retryAfter);
         } catch (TelegramApiException e) {
             LOG.log(Level.WARNING, "שליחת הודעה בטלגרם נכשלה", e);
+            return new Outcome(SendResult.TRANSIENT_FAILURE, null);
         }
-        return false;
+    }
+
+    private long backoffMillis(Integer retryAfterSeconds, int attempt) {
+        if (retryAfterSeconds != null && retryAfterSeconds > 0) {
+            return retryAfterSeconds * MILLIS_PER_SECOND;
+        }
+        return AppConfig.SEND_BACKOFF_BASE_MILLIS * (1L << (attempt - 1));
     }
 
     public void runOnNotificationPool(String description, Runnable task) {
@@ -111,6 +168,11 @@ public class TelegramGateway extends TelegramLongPollingBot {
 
     public void runOnPriorityPool(String description, Runnable task) {
         runAsync(priorityExecutor, description, task);
+    }
+
+    /** אישורי לחיצה בתור נפרד: 429 באישור אחד לא יעצור את חוט ה-polling ואת שאר העדכונים. */
+    public void runOnAckPool(String description, Runnable task) {
+        runAsync(ackExecutor, description, task);
     }
 
     /**
@@ -145,6 +207,7 @@ public class TelegramGateway extends TelegramLongPollingBot {
      * כאן נותנים להן להסתיים, ורק אז כופים כיבוי.
      */
     public void shutdownGracefully(Duration timeout) {
+        ackExecutor.shutdown();
         notificationExecutor.shutdown();
         priorityExecutor.shutdown();
         try {
@@ -155,10 +218,15 @@ public class TelegramGateway extends TelegramLongPollingBot {
                     AppConfig.NOTIFICATION_SHUTDOWN_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
                 notificationExecutor.shutdownNow();
             }
+            if (!ackExecutor.awaitTermination(
+                    AppConfig.NOTIFICATION_SHUTDOWN_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+                ackExecutor.shutdownNow();
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             priorityExecutor.shutdownNow();
             notificationExecutor.shutdownNow();
+            ackExecutor.shutdownNow();
         }
     }
 }

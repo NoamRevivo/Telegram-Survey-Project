@@ -31,6 +31,11 @@ public final class AppConfig {
 
     /* ---------- טלגרם ---------- */
     public static final int NOTIFICATION_POOL_SIZE = 4;
+    public static final int ACK_POOL_SIZE = 2;
+    /** מספר הניסיונות המרבי לשליחה כשהכישלון זמני (429, 5xx, תקלת רשת). */
+    public static final int SEND_MAX_ATTEMPTS = 3;
+    public static final long SEND_BACKOFF_BASE_MILLIS = 500L;
+    public static final long SEND_MAX_BACKOFF_MILLIS = 10_000L;
     /** קצב ההפצה — 100ms מספיקים ורחוקים ממגבלת 30 הודעות/שנייה */
     public static final long INTRO_DELAY_MILLIS = 100L;
     public static final long QUESTION_DELAY_MILLIS = 100L;
@@ -41,6 +46,8 @@ public final class AppConfig {
 
     /* ---------- שירות יצירת השאלות ---------- */
     public static final Duration API_TIMEOUT = Duration.ofSeconds(20);
+    /** תקרה לפנייה כולה, גם כששרת מטפטף בתים ואף פעולת socket בודדת אינה חורגת מ-API_TIMEOUT. */
+    public static final Duration API_CALL_TIMEOUT = Duration.ofSeconds(30);
     public static final int RESPONSE_SNIPPET_LENGTH = 200;
 
     /* ---------- ממשק המשתמש ---------- */

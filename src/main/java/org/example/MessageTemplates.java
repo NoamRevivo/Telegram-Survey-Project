@@ -105,6 +105,8 @@ public final class MessageTemplates {
                 return "הסקר כבר הסתיים.";
             case UNKNOWN_PARTICIPANT:
                 return "הצטרפת אחרי שהסקר התחיל — תוכל/י להשתתף בסקר הבא.";
+            case INVALID_ANSWER:
+                return invalidButton();
             default:
                 return "לא ניתן לקלוט את התשובה.";
         }

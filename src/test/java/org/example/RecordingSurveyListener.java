@@ -13,6 +13,7 @@ public class RecordingSurveyListener implements SurveyListener {
     public int reminderRoundsCount;
     public int lastSecondsRemaining = -1;
     public final List<Long> remindedIds = new ArrayList<>();
+    public final List<Long> unreachableIds = new ArrayList<>();
 
     private boolean closed;
 
@@ -29,6 +30,11 @@ public class RecordingSurveyListener implements SurveyListener {
         if (closed) {
             ticksAfterClose++;
         }
+    }
+
+    @Override
+    public void onParticipantUnreachable(SurveyParticipant participant) {
+        unreachableIds.add(participant.getUser().getTelegramId());
     }
 
     @Override

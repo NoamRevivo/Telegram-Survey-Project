@@ -4,14 +4,15 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.UUID;
 
 public class Survey {
     public static final int MIN_QUESTIONS = 1;
     public static final int MAX_QUESTIONS = 3;
 
     private final List<Question> questions;
-    private final String id = String.format("%08x", ThreadLocalRandom.current().nextInt());
+    private final String id = UUID.randomUUID().toString();
+    private final int delayMinutes;
     private volatile SurveyStatus status;
     private volatile LocalDateTime startTime;
 
@@ -24,6 +25,7 @@ public class Survey {
             throw new IllegalArgumentException("זמן עיכוב לא יכול להיות שלילי");
         }
         this.questions = new ArrayList<>(questions);
+        this.delayMinutes = delayMinutes;
         this.status = SurveyStatus.PENDING;
     }
 
@@ -33,6 +35,10 @@ public class Survey {
 
     public List<Question> getQuestions() {
         return Collections.unmodifiableList(questions);
+    }
+
+    public int getDelayMinutes() {
+        return delayMinutes;
     }
 
     public SurveyStatus getStatus() {
