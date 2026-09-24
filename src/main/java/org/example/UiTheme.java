@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.ComponentOrientation;
 
+/** צבעים, גדלי גופן ומרווחים של הממשק. */
 public final class UiTheme {
     public static final Color BRAND_BLUE = new Color(0x2AABEE);
     public static final Color BRAND_DARK_BLUE = new Color(0x229ED9);

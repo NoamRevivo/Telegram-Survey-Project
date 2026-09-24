@@ -11,6 +11,7 @@ import javax.swing.UIManager;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/** נקודת הכניסה: מרכיבה את המנהלים, פותחת את החלון ומחברת את הבוט לטלגרם. */
 public class Main {
     private static final Logger LOG = Logger.getLogger(Main.class.getName());
 
@@ -56,6 +57,8 @@ public class Main {
                     + "\nבדוק את " + AppConfig.ENV_BOT_TOKEN + " ואת החיבור לרשת.");
             return;
         }
+
+        frameHolder[0].markBotConnected();
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (session.isRunning()) {

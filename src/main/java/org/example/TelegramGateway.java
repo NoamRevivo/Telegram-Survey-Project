@@ -10,6 +10,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiRequestException;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -20,7 +21,7 @@ import java.util.logging.Logger;
  * שכבת התעבורה מול טלגרם בלבד — שליחה, retry, תורי עבודה וכיבוי מסודר.
  * היא אינה יודעת דבר על סקרים, קהילה או ניסוחים.
  */
-public class TelegramGateway extends TelegramLongPollingBot {
+public class TelegramGateway extends TelegramLongPollingBot implements MessageSender {
     /** תוצאת שליחה מפורטת — הקורא מבדיל בין חסימה קבועה לבין תקלה זמנית. */
     public enum SendResult {
         DELIVERED,
@@ -34,6 +35,10 @@ public class TelegramGateway extends TelegramLongPollingBot {
         void onMessage(Message message);
 
         void onCallback(CallbackQuery callbackQuery);
+
+        /** הודעה שאינה טקסט (מדבקה, תמונה...) בשיחה עם הבוט. ברירת המחדל: להתעלם. */
+        default void onUnsupportedMessage(Message message) {
+        }
     }
 
     private record Outcome(SendResult result, Integer retryAfterSeconds) {
@@ -50,9 +55,14 @@ public class TelegramGateway extends TelegramLongPollingBot {
 
     /** הפצה במקביל למשתתפים, ותור נפרד לתזכורות ולהודעות סיום */
     private final ExecutorService notificationExecutor =
-            Executors.newFixedThreadPool(AppConfig.NOTIFICATION_POOL_SIZE);
-    private final ExecutorService priorityExecutor = Executors.newSingleThreadExecutor();
-    private final ExecutorService ackExecutor = Executors.newFixedThreadPool(AppConfig.ACK_POOL_SIZE);
+            Executors.newFixedThreadPool(AppConfig.NOTIFICATION_POOL_SIZE, new NamedThreadFactory("bot-notify"));
+    private final ExecutorService priorityExecutor =
+            Executors.newSingleThreadExecutor(new NamedThreadFactory("bot-priority"));
+    private final ExecutorService ackExecutor =
+            Executors.newFixedThreadPool(AppConfig.ACK_POOL_SIZE, new NamedThreadFactory("bot-ack"));
+    /** תשובות לפקודות — לא על חוט ה-polling, כדי שהמתנה ל-429 לא תעכב לחיצות על כפתורי הסקר */
+    private final ExecutorService replyExecutor =
+            Executors.newFixedThreadPool(AppConfig.REPLY_POOL_SIZE, new NamedThreadFactory("bot-reply"));
 
     public TelegramGateway(String botUsername, String botToken, UpdateHandler handler) {
         this.botUsername = botUsername;
@@ -76,6 +86,8 @@ public class TelegramGateway extends TelegramLongPollingBot {
         try {
             if (update.hasMessage() && update.getMessage().hasText()) {
                 handler.onMessage(update.getMessage());
+            } else if (update.hasMessage()) {
+                handler.onUnsupportedMessage(update.getMessage());
             } else if (update.hasCallbackQuery()) {
                 handler.onCallback(update.getCallbackQuery());
             }
@@ -84,10 +96,12 @@ public class TelegramGateway extends TelegramLongPollingBot {
         }
     }
 
+    @Override
     public boolean sendText(long chatId, String text) {
         return trySendText(chatId, text) == SendResult.DELIVERED;
     }
 
+    @Override
     public SendResult trySendText(long chatId, String text) {
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
@@ -95,6 +109,7 @@ public class TelegramGateway extends TelegramLongPollingBot {
         return trySend(message);
     }
 
+    @Override
     public boolean send(BotApiMethod<?> method) {
         return trySend(method) == SendResult.DELIVERED;
     }
@@ -102,7 +117,11 @@ public class TelegramGateway extends TelegramLongPollingBot {
     /**
      * שליחה עם ניסיונות חוזרים על כישלון זמני בלבד (429, 5xx, תקלת רשת), עם המתנה גדלה.
      * חסימה של המשתתף (403) ותוכן פסול (400) אינם נחזרים — ניסיון נוסף לא ישנה אותם.
+     * <p>
+     * סמנטיקה של "לפחות פעם אחת": אם הבקשה הגיעה לטלגרם אבל התשובה נקטעה (timeout בקריאה), הניסיון החוזר
+     * עלול לשלוח את ההודעה פעמיים. לכפתורי הסקר זה בטוח — שני הכפתורים נושאים אותם נתונים, והתשובה השנייה נדחית כ"כבר ענית".
      */
+    @Override
     public SendResult trySend(BotApiMethod<?> method) {
         for (int attempt = 1; attempt <= AppConfig.SEND_MAX_ATTEMPTS; attempt++) {
             if (Thread.currentThread().isInterrupted()) {
@@ -132,9 +151,14 @@ public class TelegramGateway extends TelegramLongPollingBot {
         return attemptOnce(method).result();
     }
 
+    /** נקודת החיבור היחידה לספרייה — ניתנת להחלפה בבדיקות של לוגיקת ה-retry. */
+    protected void executeApi(BotApiMethod<?> method) throws TelegramApiException {
+        execute(method);
+    }
+
     private Outcome attemptOnce(BotApiMethod<?> method) {
         try {
-            execute(method);
+            executeApi(method);
             return new Outcome(SendResult.DELIVERED, null);
         } catch (TelegramApiRequestException e) {
             Integer code = e.getErrorCode();
@@ -162,12 +186,19 @@ public class TelegramGateway extends TelegramLongPollingBot {
         return AppConfig.SEND_BACKOFF_BASE_MILLIS * (1L << (attempt - 1));
     }
 
+    @Override
     public void runOnNotificationPool(String description, Runnable task) {
         runAsync(notificationExecutor, description, task);
     }
 
+    @Override
     public void runOnPriorityPool(String description, Runnable task) {
         runAsync(priorityExecutor, description, task);
+    }
+
+    @Override
+    public void runOnReplyPool(String description, Runnable task) {
+        runAsync(replyExecutor, description, task);
     }
 
     /** אישורי לחיצה בתור נפרד: 429 באישור אחד לא יעצור את חוט ה-polling ואת שאר העדכונים. */
@@ -185,8 +216,12 @@ public class TelegramGateway extends TelegramLongPollingBot {
             executor.execute(() -> {
                 try {
                     task.run();
-                } catch (RuntimeException | Error e) {
+                } catch (RuntimeException e) {
                     LOG.log(Level.SEVERE, "משימה אסינכרונית נכשלה: " + description, e);
+                } catch (Error e) {
+                    // שגיאת JVM (זיכרון, מחסנית) אינה מוסתרת: נרשמת וממשיכה למעלה
+                    LOG.log(Level.SEVERE, "שגיאה חמורה במשימה: " + description, e);
+                    throw e;
                 }
             });
         } catch (RuntimeException e) {
@@ -194,6 +229,7 @@ public class TelegramGateway extends TelegramLongPollingBot {
         }
     }
 
+    @Override
     public void sleepMillis(long millis) {
         try {
             Thread.sleep(millis);
@@ -207,26 +243,23 @@ public class TelegramGateway extends TelegramLongPollingBot {
      * כאן נותנים להן להסתיים, ורק אז כופים כיבוי.
      */
     public void shutdownGracefully(Duration timeout) {
-        ackExecutor.shutdown();
-        notificationExecutor.shutdown();
-        priorityExecutor.shutdown();
+        List<ExecutorService> executors =
+                List.of(priorityExecutor, notificationExecutor, ackExecutor, replyExecutor);
+        executors.forEach(ExecutorService::shutdown);
         try {
-            if (!priorityExecutor.awaitTermination(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
-                priorityExecutor.shutdownNow();
-            }
-            if (!notificationExecutor.awaitTermination(
-                    AppConfig.NOTIFICATION_SHUTDOWN_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
-                notificationExecutor.shutdownNow();
-            }
-            if (!ackExecutor.awaitTermination(
-                    AppConfig.NOTIFICATION_SHUTDOWN_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
-                ackExecutor.shutdownNow();
-            }
+            awaitOrForce(priorityExecutor, timeout);
+            awaitOrForce(notificationExecutor, AppConfig.NOTIFICATION_SHUTDOWN_TIMEOUT);
+            awaitOrForce(ackExecutor, AppConfig.NOTIFICATION_SHUTDOWN_TIMEOUT);
+            awaitOrForce(replyExecutor, AppConfig.NOTIFICATION_SHUTDOWN_TIMEOUT);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            priorityExecutor.shutdownNow();
-            notificationExecutor.shutdownNow();
-            ackExecutor.shutdownNow();
+            executors.forEach(ExecutorService::shutdownNow);
+        }
+    }
+
+    private static void awaitOrForce(ExecutorService executor, Duration timeout) throws InterruptedException {
+        if (!executor.awaitTermination(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
+            executor.shutdownNow();
         }
     }
 }

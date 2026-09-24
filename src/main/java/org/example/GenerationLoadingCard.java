@@ -62,13 +62,19 @@ final class GenerationLoadingCard extends JPanel {
 
         long startedAt = System.currentTimeMillis();
         stopTimer();
-        elapsedTimer = new Timer(AppConfig.ELAPSED_TICK_MILLIS, e -> {
-            int seconds = (int) ((System.currentTimeMillis() - startedAt) / 1000);
-            elapsedLabel.setText(seconds < AppConfig.SLOW_RESPONSE_SECONDS
-                    ? "חלפו " + seconds + " שניות…"
-                    : "חלפו " + seconds + " שניות — עוד רגע, השרת עדיין עונה…");
-        });
+        elapsedTimer = new Timer(AppConfig.ELAPSED_TICK_MILLIS, e ->
+                elapsedLabel.setText(elapsedText((int) ((System.currentTimeMillis() - startedAt) / 1000))));
         elapsedTimer.start();
+    }
+
+    /** מעל דקה מוצג כ-m:ss, כדי ש-"חלפו 95 שניות" לא יראה כמו תקלה. */
+    static String elapsedText(int seconds) {
+        String elapsed = seconds < 60
+                ? seconds + " שניות"
+                : MessageTemplates.formatClock(seconds) + " דקות";
+        return seconds < AppConfig.SLOW_RESPONSE_SECONDS
+                ? "חלפו " + elapsed + "…"
+                : "חלפו " + elapsed + " — עוד רגע, השרת עדיין עונה…";
     }
 
     void showCancelling() {

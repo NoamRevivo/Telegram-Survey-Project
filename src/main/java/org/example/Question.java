@@ -4,13 +4,19 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
+/** שאלה עם אפשרויות תשובה. הוולידציה בבנאי — אי אפשר ליצור שאלה לא תקינה. */
 public class Question {
     public static final int MIN_OPTIONS = 2;
     public static final int MAX_OPTIONS = 4;
     public static final int MAX_TEXT_LENGTH = 300;
+    /** אפשרות ארוכה מדי נחתכת בכפתור בטלגרם, ובנוסף מנפחת את הודעת "התשובה שלך" */
+    public static final int MAX_OPTION_LENGTH = 64;
+
+    private static final String ELLIPSIS = "…";
 
     private final String id;
     private final String text;
@@ -35,7 +41,11 @@ public class Question {
                 throw new IllegalArgumentException("אפשרות תשובה לא יכולה להיות ריקה");
             }
             String trimmed = option.trim();
-            if (!seen.add(trimmed.toLowerCase())) {
+            if (trimmed.length() > MAX_OPTION_LENGTH) {
+                throw new IllegalArgumentException(
+                        "האפשרות \"" + trimmed + "\" ארוכה מדי (עד " + MAX_OPTION_LENGTH + " תווים)");
+            }
+            if (!seen.add(optionKey(trimmed))) {
                 throw new IllegalArgumentException("האפשרות \"" + trimmed + "\" מופיעה פעמיים");
             }
             cleaned.add(trimmed);
@@ -43,6 +53,20 @@ public class Question {
         this.id = UUID.randomUUID().toString();
         this.text = text.trim();
         this.options = cleaned;
+    }
+
+    /** מפתח השוואה לאפשרות — כך הכפילויות מזוהות באותה צורה בבנאי, בפרסר ובדיאלוג. */
+    static String optionKey(String option) {
+        return option.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /** לפרסר של תשובות שירות חיצוני: חותך אפשרות ארוכה מדי במקום לפסול את כל השאלה. */
+    static String truncateOption(String option) {
+        String trimmed = option.trim();
+        if (trimmed.length() <= MAX_OPTION_LENGTH) {
+            return trimmed;
+        }
+        return trimmed.substring(0, MAX_OPTION_LENGTH - ELLIPSIS.length()).trim() + ELLIPSIS;
     }
 
     public String getId() {

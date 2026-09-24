@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/** לקוח HTTP לשירות יצירת השאלות; בקשה אחת בכל פעם, עם אפשרות ביטול מבחוץ. */
 public class ChatGPTService {
     private static final Logger LOG = Logger.getLogger(ChatGPTService.class.getName());
     private final String token;
@@ -22,50 +23,34 @@ public class ChatGPTService {
     private final AtomicReference<Call> currentCall = new AtomicReference<>();
 
     public ChatGPTService(String token, String endpoint) {
-        this.token = token;
-        this.endpoint = endpoint;
-        this.client = new OkHttpClient.Builder()
+        this(token, endpoint, new OkHttpClient.Builder()
                 .connectTimeout(AppConfig.API_TIMEOUT)
                 .readTimeout(AppConfig.API_TIMEOUT)
                 .writeTimeout(AppConfig.API_TIMEOUT)
                 .callTimeout(AppConfig.API_CALL_TIMEOUT)
-                .build();
+                .build());
     }
 
-    /**
-     * שירות ה-API (shaitest-production) קורא את הטוקן מפרמטר ה-query בשם token ולא מכותרת
-     * ה-Authorization — נבדק אמפירית: בקשה בלי token בכלל מחזירה code 1024, ועם token שגוי
-     * code 1029. לכן הטוקן נשלח כאן בשני האופנים: כפרמטר, כדי שהשירות בפועל יזהה אותו, וגם
-     * ב-Authorization, כגיבוי אם השירות ישודרג בעתיד לקרוא ממנו.
-     */
-    public GeneratedSurvey generateSurvey(String topic) throws SurveyGenerationException {
-        if (token == null || token.isBlank()) {
-            throw new SurveyGenerationException("חסר משתנה הסביבה "
-                    + AppConfig.ENV_SURVEY_API_TOKEN + " — לא ניתן ליצור שאלות אוטומטית.");
-        }
-        if (topic == null || topic.isBlank()) {
-            throw new SurveyGenerationException("נושא הסקר לא יכול להיות ריק.");
-        }
+    /** הלקוח מוזרק כדי שאפשר יהיה לבדוק את הטיפול בתשובות ובכשלי רשת בלי רשת אמיתית. */
+    ChatGPTService(String token, String endpoint, OkHttpClient client) {
+        this.token = token;
+        this.endpoint = endpoint;
+        this.client = client;
+    }
 
-        HttpUrl baseUrl = HttpUrl.parse(endpoint);
-        if (baseUrl == null) {
-            throw new SurveyGenerationException("כתובת שירות יצירת השאלות אינה תקינה: " + endpoint);
-        }
-        HttpUrl url = baseUrl.newBuilder()
-                .addQueryParameter("text", buildPrompt(topic))
-                .addQueryParameter("token", token)
-                .build();
-        Request request = new Request.Builder()
-                .url(url)
-                .header("Authorization", "Bearer " + token)
-                .build();
+    /** שולח את הנושא לשירות ומחזיר את השאלות שפורקו; כל כשל מתורגם ל-{@link SurveyGenerationException} בעברית. */
+    public GeneratedSurvey generateSurvey(String topic) throws SurveyGenerationException {
+        Request request = buildRequest(topic);
         Call call = client.newCall(request);
         currentCall.set(call);
         if (Thread.currentThread().isInterrupted()) {
             call.cancel();
         }
         try (Response response = call.execute()) {
-            String responseBody = response.body() == null ? "" : response.body().string();
+            // peekBody: קורא לכל היותר MAX_RESPONSE_BYTES, כך ששרת תקול לא יטען לזיכרון תגובה בגודל חופשי
+            String responseBody = response.body() == null
+                    ? ""
+                    : response.peekBody(AppConfig.MAX_RESPONSE_BYTES).string();
             if (!response.isSuccessful()) {
                 throw new SurveyGenerationException("שירות יצירת השאלות החזיר שגיאה " + response.code()
                         + ". " + SurveyJsonParser.snippet(responseBody));
@@ -80,6 +65,42 @@ public class ChatGPTService {
         } finally {
             currentCall.compareAndSet(call, null);
         }
+    }
+
+    /**
+     * בדיקת הקלט ובניית הבקשה — בלי רשת, ולכן ניתנת לבדיקה ישירה.
+     * <p>
+     * שירות ה-API (shaitest-production) קורא את הטוקן מפרמטר ה-query בשם token ולא מכותרת
+     * ה-Authorization — נבדק אמפירית: בקשה בלי token בכלל מחזירה code 1024, ועם token שגוי
+     * code 1029. לכן הטוקן נשלח כאן בשני האופנים: כפרמטר, כדי שהשירות בפועל יזהה אותו, וגם
+     * ב-Authorization, כגיבוי אם השירות ישודרג בעתיד לקרוא ממנו.
+     */
+    Request buildRequest(String topic) throws SurveyGenerationException {
+        if (token == null || token.isBlank()) {
+            throw new SurveyGenerationException("חסר משתנה הסביבה "
+                    + AppConfig.ENV_SURVEY_API_TOKEN + " — לא ניתן ליצור שאלות אוטומטית.");
+        }
+        if (topic == null || topic.isBlank()) {
+            throw new SurveyGenerationException("נושא הסקר לא יכול להיות ריק.");
+        }
+        String cleanTopic = topic.trim();
+        if (cleanTopic.length() > AppConfig.MAX_TOPIC_CHARS) {
+            throw new SurveyGenerationException(
+                    "נושא הסקר ארוך מדי (עד " + AppConfig.MAX_TOPIC_CHARS + " תווים).");
+        }
+
+        HttpUrl baseUrl = HttpUrl.parse(endpoint);
+        if (baseUrl == null) {
+            throw new SurveyGenerationException("כתובת שירות יצירת השאלות אינה תקינה: " + endpoint);
+        }
+        HttpUrl url = baseUrl.newBuilder()
+                .addQueryParameter("text", buildPrompt(cleanTopic))
+                .addQueryParameter("token", token)
+                .build();
+        return new Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer " + token)
+                .build();
     }
 
     /**

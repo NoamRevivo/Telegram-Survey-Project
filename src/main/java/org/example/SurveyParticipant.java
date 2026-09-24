@@ -3,12 +3,20 @@ package org.example;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+/** חבר קהילה בתוך סקר מסוים: תשובותיו, התקדמותו ומצב ההפצה אליו. */
 public class SurveyParticipant {
     private final CommunityUser user;
     private volatile ParticipantStatus status;
     private volatile boolean unreachable;
     private final Map<String, String> answersByQuestionId = new ConcurrentHashMap<>();
+
+    /* מעקב הפצה: מה כבר נמסר לו — כדי שניסיון חוזר ישלח רק את מה שחסר ולא יכפיל הודעות */
+    private volatile boolean introDelivered;
+    private volatile int questionsDelivered;
+    private volatile boolean deliveryFailed;
+    private final AtomicBoolean deliveryInProgress = new AtomicBoolean();
 
     public SurveyParticipant(CommunityUser user) {
         this.user = user;
@@ -30,6 +38,40 @@ public class SurveyParticipant {
     /** ההודעות לא הגיעו אליו (חסם את הבוט וכו') — אינו חוסם סגירה מוקדמת ואינו מקבל תזכורת. */
     public void markUnreachable() {
         unreachable = true;
+    }
+
+    /** ההפצה אליו נכשלה בכשל זמני/דחייה — אינו חסום, ולכן ננסה שוב לשלוח את מה שחסר. */
+    public boolean isDeliveryFailed() {
+        return deliveryFailed;
+    }
+
+    void setDeliveryFailed(boolean failed) {
+        this.deliveryFailed = failed;
+    }
+
+    boolean isIntroDelivered() {
+        return introDelivered;
+    }
+
+    void markIntroDelivered() {
+        introDelivered = true;
+    }
+
+    int getQuestionsDelivered() {
+        return questionsDelivered;
+    }
+
+    void markQuestionDelivered() {
+        questionsDelivered++;
+    }
+
+    /** מונע שתי משימות הפצה במקביל לאותו משתתף (הפצה מקורית וניסיון חוזר). */
+    boolean tryBeginDelivery() {
+        return deliveryInProgress.compareAndSet(false, true);
+    }
+
+    void endDelivery() {
+        deliveryInProgress.set(false);
     }
 
     public int getAnsweredQuestionsCount() {

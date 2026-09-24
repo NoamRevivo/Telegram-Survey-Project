@@ -9,7 +9,6 @@ import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JTable;
 import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
@@ -23,6 +22,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * מסך «סקר פעיל»: ספירה לאחור, טבלת משתתפים וסטטיסטיקה בזמן אמת. מתודות המאזין רצות על ה-EDT — נרשם דרך {@link EdtSurveyListener}.
+ */
 public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     private static final String CARD_IDLE = "idle";
     private static final String CARD_LIVE = "live";
@@ -32,6 +34,7 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     private static final String STATUS_COMPLETED = "השלים";
     private static final String STATUS_MISSED = "לא השלים";
     private static final String STATUS_UNREACHABLE = "לא נמסר";
+    private static final String STATUS_DELIVERY_FAILED = "תקלת שליחה";
 
     private final SurveyManager surveyManager;
 
@@ -55,6 +58,10 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
     private List<SurveyParticipant> currentParticipants;
 
     private String closedSurveyId;
+    /** הסקר שהכרטיס מציג כרגע — מעבר לסקר אחר מאפס את הטבלה והסטטיסטיקה (אחרת נשארים נתוני הסקר הקודם) */
+    private String displayedSurveyId;
+    /** המנהל אישר עצירה — טיק שמגיע אחר כך אינו מפעיל מחדש את הכפתור */
+    private boolean stopRequested;
     private boolean pendingPhase;
 
     private int phaseMaxSeconds = 1;
@@ -133,48 +140,85 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         if (!Dialogs.confirm(this, title, message)) {
             return;
         }
+        stopRequested = true;
         stopButton.setEnabled(false);
         if (cancelBeforeSending) {
-            surveyManager.cancelPendingSurvey();
+            if (!surveyManager.cancelPendingSurvey()) {
+                offerToCloseStartedSurvey();
+            }
         } else {
             surveyManager.closeSurvey();
         }
     }
 
+    /**
+     * המנהל אישר "ביטול לפני שליחה", אבל הספירה הגיעה ל-0 בזמן שחלון האישור היה פתוח והסקר כבר יצא.
+     * אומרים את זה במפורש (במקום להניח שהסקר בוטל) ומציעים לסגור אותו.
+     */
+    private void offerToCloseStartedSurvey() {
+        if (!surveyManager.isSurveyInProgress()) {
+            return;
+        }
+        boolean closeNow = Dialogs.confirmWarning(this, "הסקר כבר נשלח",
+                "בזמן שחלון האישור היה פתוח הסקר יצא למשתתפים, ולכן אי אפשר לבטל אותו.\nלסגור אותו עכשיו?");
+        if (closeNow) {
+            surveyManager.closeSurvey();
+        } else {
+            stopRequested = false;
+            stopButton.setEnabled(true);
+        }
+    }
+
+    /** מחליפים סקר: מנקים את הטבלה, המיפוי והסטטיסטיקה של הסקר הקודם. */
+    private void showSurveyIfNew(String surveyId) {
+        if (surveyId.equals(displayedSurveyId)) {
+            return;
+        }
+        displayedSurveyId = surveyId;
+        stopRequested = false;
+        phaseInitialized = false;
+        currentParticipants = null;
+        tableModel.setRowCount(0);
+        rowByTelegramId.clear();
+        totalLabel.setText("👥 סה\"כ משתתפים: 0");
+        finishedLabel.setText("✅ סיימו: 0");
+        pendingLabel.setText("⏳ טרם סיימו: 0");
+        unreachableLabel.setText("🚫 לא נמסר: 0");
+    }
+
     @Override
     public void onCountdownTick(String surveyId, int secondsRemaining, boolean isPendingPhase) {
-        SwingUtilities.invokeLater(() -> {
-            if (surveyId.equals(closedSurveyId)) {
-                return;
-            }
-            pendingPhase = isPendingPhase;
-            cards.show(cardHolder, CARD_LIVE);
-            stopButton.setEnabled(true);
-            stopButton.setText(isPendingPhase ? "⏹ בטל את הסקר" : "⏹ סיים סקר עכשיו");
-            updatePhaseBase(secondsRemaining, isPendingPhase);
+        if (surveyId.equals(closedSurveyId)) {
+            return;
+        }
+        showSurveyIfNew(surveyId);
+        pendingPhase = isPendingPhase;
+        cards.show(cardHolder, CARD_LIVE);
+        stopButton.setEnabled(!stopRequested);
+        stopButton.setText(isPendingPhase ? "⏹ בטל את הסקר" : "⏹ סיים סקר עכשיו");
+        updatePhaseBase(secondsRemaining, isPendingPhase);
 
-            String mmss = String.format("%02d:%02d", secondsRemaining / 60, secondsRemaining % 60);
-            boolean lastSeconds = !isPendingPhase
-                    && secondsRemaining <= AppConfig.URGENT_SECONDS_BEFORE_END;
+        String mmss = MessageTemplates.formatClock(secondsRemaining);
+        boolean lastSeconds = !isPendingPhase
+                && secondsRemaining <= AppConfig.URGENT_SECONDS_BEFORE_END;
 
-            countdownLabel.setText(isPendingPhase
-                    ? "⏳ הסקר יישלח בעוד: " + mmss
-                    : (lastSeconds ? "⚠ " : "⏱ ") + "זמן לסיום הסקר: " + mmss);
+        countdownLabel.setText(isPendingPhase
+                ? "⏳ הסקר יישלח בעוד: " + mmss
+                : (lastSeconds ? "⚠ " : "⏱ ") + "זמן לסיום הסקר: " + mmss);
 
-            if (lastSeconds) {
-                blinkOn = !blinkOn;
-                countdownLabel.setForeground(blinkOn ? UiTheme.ERROR_RED : UiTheme.ERROR_RED_SOFT);
-            } else {
-                countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
-            }
+        if (lastSeconds) {
+            blinkOn = !blinkOn;
+            countdownLabel.setForeground(blinkOn ? UiTheme.ERROR_RED : UiTheme.ERROR_RED_SOFT);
+        } else {
+            countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
+        }
 
-            countdownBar.setValue(Math.min(secondsRemaining, phaseMaxSeconds));
-            countdownBar.setForeground(barColorFor(secondsRemaining, isPendingPhase));
+        countdownBar.setValue(Math.min(secondsRemaining, phaseMaxSeconds));
+        countdownBar.setForeground(barColorFor(secondsRemaining, isPendingPhase));
 
-            phaseNoteLabel.setText(isPendingPhase
-                    ? "הסקר ממתין לשליחה — עדיין אפשר לבטל אותו"
-                    : "🔴 הסקר פעיל — התשובות נקלטות בזמן אמת");
-        });
+        phaseNoteLabel.setText(isPendingPhase
+                ? "הסקר ממתין לשליחה — עדיין אפשר לבטל אותו"
+                : "🔴 הסקר פעיל — התשובות נקלטות בזמן אמת");
     }
 
     private void updatePhaseBase(int secondsRemaining, boolean isPendingPhase) {
@@ -199,91 +243,96 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
 
     @Override
     public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
-        SwingUtilities.invokeLater(() -> {
-            this.closedSurveyId = null;
-            this.pendingPhase = false;
-            this.totalQuestions = survey.getQuestions().size();
-            this.currentParticipants = participants;
-            tableModel.setRowCount(0);
-            rowByTelegramId.clear();
-            int row = 0;
-            for (SurveyParticipant p : participants) {
-                tableModel.addRow(new Object[]{
-                        p.getUser().toString(), "0/" + totalQuestions, STATUS_WAITING});
-                rowByTelegramId.put(p.getUser().getTelegramId(), row++);
-            }
-            stopButton.setEnabled(true);
-            stopButton.setText("⏹ סיים סקר עכשיו");
-            countdownLabel.setText("📤 שולח את השאלות…");
-            countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
-            phaseNoteLabel.setText("השאלות נשלחות למשתתפים — הספירה תתחיל כשכולם יקבלו אותן");
-            cards.show(cardHolder, CARD_LIVE);
-            refreshStats();
-            UiTheme.applyRtl(this);
-        });
+        this.closedSurveyId = null;
+        this.displayedSurveyId = survey.getId();
+        this.stopRequested = false;
+        this.pendingPhase = false;
+        this.totalQuestions = survey.getQuestions().size();
+        this.currentParticipants = participants;
+        tableModel.setRowCount(0);
+        rowByTelegramId.clear();
+        int row = 0;
+        for (SurveyParticipant p : participants) {
+            tableModel.addRow(new Object[]{
+                    p.getUser().toString(), "0/" + totalQuestions, STATUS_WAITING});
+            rowByTelegramId.put(p.getUser().getTelegramId(), row++);
+        }
+        stopButton.setEnabled(true);
+        stopButton.setText("⏹ סיים סקר עכשיו");
+        countdownLabel.setText("📤 שולח את השאלות…");
+        countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
+        phaseNoteLabel.setText("השאלות נשלחות למשתתפים — הספירה תתחיל כשכולם יקבלו אותן");
+        cards.show(cardHolder, CARD_LIVE);
+        refreshStats();
+        UiTheme.applyRtl(this);
     }
 
     @Override
     public void onAnswerRecorded(SurveyParticipant participant) {
-        SwingUtilities.invokeLater(() -> {
-            Integer row = rowByTelegramId.get(participant.getUser().getTelegramId());
-            if (row != null) {
-                tableModel.setValueAt(
-                        participant.getAnsweredQuestionsCount() + "/" + totalQuestions, row, 1);
-                tableModel.setValueAt(statusLabelFor(participant), row, 2);
-            }
-            refreshStats();
-        });
+        Integer row = rowByTelegramId.get(participant.getUser().getTelegramId());
+        if (row != null) {
+            tableModel.setValueAt(
+                    participant.getAnsweredQuestionsCount() + "/" + totalQuestions, row, 1);
+            tableModel.setValueAt(statusLabelFor(participant), row, 2);
+        }
+        refreshStats();
     }
 
     @Override
     public void onParticipantUnreachable(SurveyParticipant participant) {
-        SwingUtilities.invokeLater(() -> {
-            Integer row = rowByTelegramId.get(participant.getUser().getTelegramId());
-            if (row != null && !participant.isCompleted()) {
-                tableModel.setValueAt(STATUS_UNREACHABLE, row, 2);
-            }
-            refreshStats();
-            Toast.show(this, "⚠ ההודעות לא הגיעו אל " + participant.getUser().getFirstName(),
-                    Toast.Type.WARNING);
-        });
+        if (closedSurveyId != null && closedSurveyId.equals(displayedSurveyId)) {
+            return;
+        }
+        Integer row = rowByTelegramId.get(participant.getUser().getTelegramId());
+        if (row != null && !participant.isCompleted()) {
+            tableModel.setValueAt(STATUS_UNREACHABLE, row, 2);
+        }
+        refreshStats();
+        Toast.show(this, "⚠ ההודעות לא הגיעו אל " + participant.getUser().getFirstName(),
+                Toast.Type.WARNING);
+    }
+
+    @Override
+    public void onParticipantDeliveryChanged(SurveyParticipant participant) {
+        Integer row = rowByTelegramId.get(participant.getUser().getTelegramId());
+        if (row != null && !participant.isCompleted() && !participant.isUnreachable()) {
+            tableModel.setValueAt(statusLabelFor(participant), row, 2);
+        }
+        refreshStats();
     }
 
     @Override
     public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
-        SwingUtilities.invokeLater(() -> {
-            closedSurveyId = survey.getId();
-            pendingPhase = false;
-            countdownLabel.setText("🏁 הסקר הסתיים");
-            countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
-            countdownBar.setValue(0);
-            phaseNoteLabel.setText("התוצאות המלאות מוצגות בלשונית «תוצאות»");
-            stopButton.setEnabled(false);
-            phaseInitialized = false;
+        closedSurveyId = survey.getId();
+        pendingPhase = false;
+        countdownLabel.setText("🏁 הסקר הסתיים");
+        countdownLabel.setForeground(UiTheme.BRAND_DARK_BLUE);
+        countdownBar.setValue(0);
+        phaseNoteLabel.setText("התוצאות המלאות מוצגות בלשונית «תוצאות»");
+        stopButton.setEnabled(false);
+        phaseInitialized = false;
 
-            for (SurveyParticipant p : participants) {
-                Integer row = rowByTelegramId.get(p.getUser().getTelegramId());
-                if (row != null && !p.isCompleted() && !p.isUnreachable()) {
-                    tableModel.setValueAt(STATUS_MISSED, row, 2);
-                }
+        for (SurveyParticipant p : participants) {
+            Integer row = rowByTelegramId.get(p.getUser().getTelegramId());
+            if (row != null && !p.isCompleted() && !p.isUnreachable()) {
+                tableModel.setValueAt(STATUS_MISSED, row, 2);
             }
-            table.repaint();
-            refreshStats();
-        });
+        }
+        table.repaint();
+        refreshStats();
     }
 
     @Override
     public void onSurveyCancelled(Survey survey) {
-        SwingUtilities.invokeLater(() -> {
-            closedSurveyId = survey.getId();
-            pendingPhase = false;
-            phaseInitialized = false;
-            currentParticipants = null;
-            tableModel.setRowCount(0);
-            rowByTelegramId.clear();
-            stopButton.setEnabled(false);
-            cards.show(cardHolder, CARD_IDLE);
-        });
+        closedSurveyId = survey.getId();
+        pendingPhase = false;
+        phaseInitialized = false;
+        currentParticipants = null;
+        tableModel.setRowCount(0);
+        rowByTelegramId.clear();
+        stopRequested = false;
+        stopButton.setEnabled(false);
+        cards.show(cardHolder, CARD_IDLE);
     }
 
     private String statusLabelFor(SurveyParticipant participant) {
@@ -292,6 +341,9 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
         }
         if (participant.isUnreachable()) {
             return STATUS_UNREACHABLE;
+        }
+        if (participant.isDeliveryFailed()) {
+            return STATUS_DELIVERY_FAILED;
         }
         return participant.getAnsweredQuestionsCount() > 0 ? STATUS_IN_PROGRESS : STATUS_WAITING;
     }
@@ -319,7 +371,8 @@ public class ActiveSurveyPanel extends JPanel implements SurveyListener {
                 c.setBackground(UiTheme.ROW_COMPLETED);
             } else if (STATUS_IN_PROGRESS.equals(status)) {
                 c.setBackground(UiTheme.ROW_IN_PROGRESS);
-            } else if (STATUS_MISSED.equals(status) || STATUS_UNREACHABLE.equals(status)) {
+            } else if (STATUS_MISSED.equals(status) || STATUS_UNREACHABLE.equals(status)
+                    || STATUS_DELIVERY_FAILED.equals(status)) {
                 c.setBackground(UiTheme.ROW_MISSED);
             } else {
                 c.setBackground(UiTheme.ROW_WAITING);

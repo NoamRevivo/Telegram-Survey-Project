@@ -2,6 +2,7 @@ package org.example;
 
 import java.util.List;
 
+/** מאזין לאירועי מחזור החיים של הסקר. כל המתודות אופציונליות. */
 public interface SurveyListener {
     /**
      * מזהה הסקר נשלח יחד עם הטיק, כדי שהתצוגה תוכל לזרוק טיק
@@ -18,6 +19,10 @@ public interface SurveyListener {
 
     /** ההודעות לא הגיעו למשתתף (חסם את הבוט) — הוא אינו חוסם סגירה ואינו מקבל תזכורת. */
     default void onParticipantUnreachable(SurveyParticipant participant) {
+    }
+
+    /** ההפצה למשתתף נכשלה זמנית (או שהתאוששה בניסיון חוזר) — {@link SurveyParticipant#isDeliveryFailed()}. */
+    default void onParticipantDeliveryChanged(SurveyParticipant participant) {
     }
 
     default void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {

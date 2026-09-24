@@ -19,6 +19,7 @@ import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 
+/** דיאלוג הוספה ועריכה של שאלה אחת: נוסח ואפשרויות תשובה. מחזיר {@link Question} תקין או null אם בוטל. */
 public class AddQuestionDialog extends JDialog {
     private Question result;
     private final JTextField questionField = new JTextField(30);
@@ -47,6 +48,10 @@ public class AddQuestionDialog extends JDialog {
             String option = optionField.getText().trim();
             if (option.isEmpty()) {
                 Dialogs.warn(this, "אפשרות ריקה", "אפשרות ריקה אינה חוקית.");
+            } else if (option.length() > Question.MAX_OPTION_LENGTH) {
+                Dialogs.warn(this, "אפשרות ארוכה מדי",
+                        "אפשרות תשובה יכולה להכיל עד " + Question.MAX_OPTION_LENGTH + " תווים (הוזנו "
+                                + option.length() + ").");
             } else if (optionsModel.size() >= Question.MAX_OPTIONS) {
                 Dialogs.warn(this, "מגבלת אפשרויות",
                         "ניתן להזין עד " + Question.MAX_OPTIONS + " אפשרויות.");
@@ -128,7 +133,7 @@ public class AddQuestionDialog extends JDialog {
 
     private boolean containsOption(String option) {
         for (int i = 0; i < optionsModel.size(); i++) {
-            if (optionsModel.get(i).trim().equalsIgnoreCase(option)) {
+            if (Question.optionKey(optionsModel.get(i)).equals(Question.optionKey(option))) {
                 return true;
             }
         }

@@ -5,6 +5,10 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * מכונת המצבים של הסקר (PENDING, ACTIVE, COMPLETED, CANCELLED): יצירה, ספירה לאחור, תזכורת, סגירה וקליטת תשובות.
+ * כל שינוי מצב נעשה תחת מנעול, ואירועים נשלחים למאזינים מחוץ לו. מזהה דור מבטל טיקים ותזמונים של סקר קודם.
+ */
 public class SurveyManager {
     public enum AnswerResult { RECORDED, SURVEY_NOT_ACTIVE, ALREADY_ANSWERED, UNKNOWN_PARTICIPANT, INVALID_ANSWER }
 
@@ -33,6 +37,7 @@ public class SurveyManager {
 
     public void createSurvey(List<Question> questions, int delayMinutes) {
         boolean startImmediately;
+        long generation;
         synchronized (this) {
             if (inProgress()) {
                 throw new IllegalStateException("סקר פעיל כבר קיים. סיים אותו קודם.");
@@ -43,13 +48,14 @@ public class SurveyManager {
             }
             Survey survey = new Survey(questions, delayMinutes);
             state = new SurveyState(survey, ++generationCounter);
+            generation = state.generation();
             startImmediately = survey.getDelayMinutes() <= 0;
             if (!startImmediately) {
                 startCountdown(survey.getDelayMinutes());
             }
         }
         if (startImmediately) {
-            startSurvey();
+            startSurvey(generation);
         }
     }
 
@@ -78,22 +84,25 @@ public class SurveyManager {
         }
         listeners.fire(l -> l.onCountdownTick(surveyId, left, true));
         if (reachedZero) {
-            startSurvey();
+            startSurvey(generation);
         }
     }
 
-    private void startSurvey() {
+    /**
+     * הדור נבדק כדי שהתחלה שהתעכבה בין שני מנעולים לא תפעיל סקר חדש שנוצר בינתיים
+     * (למשל: הסקר בוטל ברגע האפס והמנהל יצר סקר אחר עם דחייה).
+     */
+    private void startSurvey(long generation) {
         Survey survey;
         List<SurveyParticipant> snapshot;
         synchronized (this) {
-            if (state == null || state.status() != SurveyStatus.PENDING) {
+            if (state == null || state.generation() != generation || state.status() != SurveyStatus.PENDING) {
                 return;
             }
             state.seed(communityManager.getAllMembers());
             state.status(SurveyStatus.ACTIVE);
             state.survey().setStartTime(LocalDateTime.now());
 
-            long generation = state.generation();
             distributionWatchdog = scheduler.scheduleOnce(
                     () -> startTimers(generation),
                     Duration.ofSeconds(AppConfig.DISTRIBUTION_WATCHDOG_SECONDS));
@@ -114,6 +123,34 @@ public class SurveyManager {
             generation = state.generation();
         }
         startTimers(generation);
+    }
+
+    /** סקר במצב ACTIVE בלבד (ולא ממתין): חברים שמצטרפים עכשיו אינם שייכים אליו. */
+    public synchronized boolean isSurveyRunning() {
+        return state != null && state.status() == SurveyStatus.ACTIVE;
+    }
+
+    /**
+     * ההפצה למשתתף נכשלה זמנית (או התאוששה בניסיון חוזר). משתתף חסום/לא נגיש אינו מסומן כאן.
+     * המאזינים מקבלים אירוע רק כשהמצב באמת השתנה.
+     */
+    public void markDeliveryFailed(String surveyId, long telegramId, boolean failed) {
+        SurveyParticipant changed = null;
+        synchronized (this) {
+            if (!isActive(surveyId)) {
+                return;
+            }
+            SurveyParticipant participant = state.find(telegramId);
+            if (participant != null && !participant.isUnreachable()
+                    && participant.isDeliveryFailed() != failed) {
+                participant.setDeliveryFailed(failed);
+                changed = participant;
+            }
+        }
+        if (changed != null) {
+            SurveyParticipant updated = changed;
+            listeners.fire(l -> l.onParticipantDeliveryChanged(updated));
+        }
     }
 
     /** האם הסקר הזה עדיין פתוח לתשובות — ההפצה מפסיקה לשלוח אחרי הסגירה. */
@@ -258,11 +295,15 @@ public class SurveyManager {
         listeners.fire(l -> l.onSurveyClosed(closed, snapshot));
     }
 
-    public void cancelPendingSurvey() {
+    /**
+     * @return true אם הסקר אכן בוטל; false אם אין סקר ממתין (למשל: הוא כבר יצא לדרך בזמן שהמנהל אישר ביטול),
+     * כדי שהקורא לא יניח בטעות שהסקר בוטל
+     */
+    public boolean cancelPendingSurvey() {
         Survey cancelled;
         synchronized (this) {
             if (state == null || state.status() != SurveyStatus.PENDING) {
-                return;
+                return false;
             }
             cancelAllTasks();
             state.status(SurveyStatus.CANCELLED);
@@ -270,6 +311,7 @@ public class SurveyManager {
             state = null;
         }
         listeners.fire(l -> l.onSurveyCancelled(cancelled));
+        return true;
     }
 
     private void sendRemindersIfNeeded(long generation) {

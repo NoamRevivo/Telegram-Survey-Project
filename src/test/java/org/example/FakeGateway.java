@@ -5,8 +5,10 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Message;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +19,7 @@ import java.util.Map;
  */
 public class FakeGateway extends TelegramGateway {
     private final Map<Long, SendResult> resultsByChat = new HashMap<>();
+    private final Map<Long, Deque<SendResult>> sequenceByChat = new HashMap<>();
     private final List<SendMessage> sent = Collections.synchronizedList(new ArrayList<>());
 
     public FakeGateway() {
@@ -25,6 +28,11 @@ public class FakeGateway extends TelegramGateway {
 
     public void respondWith(long chatId, SendResult result) {
         resultsByChat.put(chatId, result);
+    }
+
+    /** תוצאות לפי הסדר, אחת לכל ניסיון שליחה לצ'אט; אחרי שנגמרו חוזרים לתוצאה הקבועה. */
+    public void respondWithSequence(long chatId, SendResult... results) {
+        sequenceByChat.put(chatId, new ArrayDeque<>(List.of(results)));
     }
 
     public List<SendMessage> sentTo(long chatId) {
@@ -44,7 +52,11 @@ public class FakeGateway extends TelegramGateway {
         if (!(method instanceof SendMessage message)) {
             return SendResult.DELIVERED;
         }
-        SendResult result = resultsByChat.getOrDefault(Long.parseLong(message.getChatId()), SendResult.DELIVERED);
+        long chatId = Long.parseLong(message.getChatId());
+        Deque<SendResult> sequence = sequenceByChat.get(chatId);
+        SendResult result = sequence != null && !sequence.isEmpty()
+                ? sequence.poll()
+                : resultsByChat.getOrDefault(chatId, SendResult.DELIVERED);
         if (result == SendResult.DELIVERED) {
             sent.add(message);
         }
@@ -62,6 +74,16 @@ public class FakeGateway extends TelegramGateway {
 
     @Override
     public void runOnPriorityPool(String description, Runnable task) {
+        task.run();
+    }
+
+    @Override
+    public void runOnReplyPool(String description, Runnable task) {
+        task.run();
+    }
+
+    @Override
+    public void runOnAckPool(String description, Runnable task) {
         task.run();
     }
 

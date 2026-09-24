@@ -194,4 +194,25 @@ class SurveyJsonParserTest {
         assertFalse(snippet.length() > AppConfig.RESPONSE_SNIPPET_LENGTH + 3);
         assertEquals("(תגובה ריקה)", SurveyJsonParser.snippet("  "));
     }
+
+    @Test
+    void overlongOptionIsShortenedInsteadOfDiscardingTheQuestion() throws Exception {
+        String longOption = "x".repeat(150);
+        String json = "{\"questions\": [{\"text\": \"שאלה\", \"options\": [\"" + longOption + "\", \"קצר\"]}]}";
+
+        GeneratedSurvey survey = SurveyJsonParser.parse(json);
+
+        assertEquals(1, survey.questions().size());
+        assertEquals(0, survey.skipped());
+        assertEquals(Question.MAX_OPTION_LENGTH, survey.questions().get(0).getOptions().get(0).length());
+    }
+
+    @Test
+    void optionsDifferingOnlyByCaseAreMerged() throws Exception {
+        String json = "{\"questions\": [{\"text\": \"Q\", \"options\": [\"Yes\", \"yes\", \"No\"]}]}";
+
+        GeneratedSurvey survey = SurveyJsonParser.parse(json);
+
+        assertEquals(List.of("Yes", "No"), survey.questions().get(0).getOptions());
+    }
 }

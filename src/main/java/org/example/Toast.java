@@ -57,7 +57,9 @@ public class Toast extends JWindow {
     public Toast(Window owner, String message, Type type) {
         super(owner);
         setSize(WIDTH, HEIGHT);
-        setAlwaysOnTop(true);
+        // חלון בעלות של חלון האב נשאר מעליו; בלי alwaysOnTop הבועה לא מופיעה מעל אפליקציות אחרות,
+        // ובלי focusable היא לא גונבת מיקוד מהמנהל באמצע הקלדה
+        setFocusableWindowState(false);
 
         boolean transparentBg = true;
         try {
@@ -95,7 +97,8 @@ public class Toast extends JWindow {
     /** דרך הקריאה המומלצת — מאתרת לבד את חלון האב ולא עושה דבר אם אין כזה. */
     public static void show(Component source, String message, Type type) {
         Window owner = SwingUtilities.getWindowAncestor(source);
-        if (owner != null) {
+        // הצפה של אירועים (למשל הצטרפות המונית) לא בונה ערימת בועות שיוצאת מהמסך
+        if (owner != null && visibleCount < AppConfig.MAX_STACKED_TOASTS) {
             new Toast(owner, message, type).showAnimated();
         }
     }

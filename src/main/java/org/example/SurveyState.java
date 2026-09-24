@@ -39,10 +39,12 @@ final class SurveyState {
 
     /** המשתתפים נקבעים ברגע שהסקר יוצא בפועל. */
     void seed(List<CommunityUser> members) {
-        participants.clear();
+        List<SurveyParticipant> seeded = new ArrayList<>(members.size());
         for (CommunityUser user : members) {
-            participants.add(new SurveyParticipant(user));
+            seeded.add(new SurveyParticipant(user));
         }
+        participants.clear();
+        participants.addAll(seeded);
     }
 
     SurveyParticipant find(long telegramId) {

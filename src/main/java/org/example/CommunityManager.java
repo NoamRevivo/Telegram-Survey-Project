@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/** חברי הקהילה שהצטרפו לבוט. בטוח לשימוש מכמה חוטים; מאזינים מקבלים אירוע מחוץ למנעול. */
 public class CommunityManager {
     private final Map<Long, CommunityUser> members = new ConcurrentHashMap<>();
     private final Listeners<CommunityListener> listeners = new Listeners<>();
@@ -22,11 +23,13 @@ public class CommunityManager {
     /** ההודעה למאזינים יוצאת מחוץ למנעול (copy-then-notify). */
     public boolean addMember(long telegramId, String firstName, String username) {
         CommunityUser user = new CommunityUser(telegramId, firstName, username);
-        CommunityUser existing = members.putIfAbsent(telegramId, user);
-        if (existing != null) {
-            return false;
+        int size;
+        synchronized (this) {
+            if (members.putIfAbsent(telegramId, user) != null) {
+                return false;
+            }
+            size = members.size();
         }
-        int size = members.size();
         listeners.fire(l -> l.onMemberAdded(user, size));
         return true;
     }
@@ -37,8 +40,7 @@ public class CommunityManager {
      */
     public List<CommunityUser> getAllMembers() {
         List<CommunityUser> sorted = new ArrayList<>(members.values());
-        sorted.sort(Comparator.comparing(CommunityUser::getJoinedAt)
-                .thenComparingLong(CommunityUser::getTelegramId));
+        sorted.sort(Comparator.comparingLong(CommunityUser::getJoinSequence));
         return List.copyOf(sorted);
     }
 

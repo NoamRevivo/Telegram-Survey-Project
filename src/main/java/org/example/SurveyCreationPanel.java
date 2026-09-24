@@ -2,7 +2,6 @@ package org.example;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
@@ -11,22 +10,18 @@ import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
-import javax.swing.JSpinner;
 import javax.swing.JTextField;
-import javax.swing.SpinnerNumberModel;
-import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
-import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Frame;
 import java.awt.Window;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -35,18 +30,14 @@ import java.util.List;
  * יצירת השאלות ב-{@link QuestionGenerationController},
  * והוולידציה בבנאים של {@link Question} ו-{@link Survey}.
  */
-public class SurveyCreationPanel extends JPanel implements CommunityListener, SurveyListener {
+public class SurveyCreationPanel extends JPanel {
     private static final String CARD_LIST = "list";
     private static final String CARD_LOADING = "loading";
-    private static final String START_TOOLTIP = "שולח את השאלות לכל חברי הקהילה ופותח את הסקר";
-    private static final String BUSY_TOOLTIP = "יש סקר פעיל או ממתין — אפשר להתחיל סקר חדש רק אחרי שיסתיים";
     private static final String GENERATE_LABEL = "✨ צור סקר";
     private static final String GENERATING_LABEL = "⏳ יוצר שאלות…";
 
-    private final SurveyManager surveyManager;
-    private final CommunityManager communityManager;
-    private final Runnable onSurveyStartedCallback;
     private final QuestionGenerationController generationController;
+    private final SurveyStartPanel startPanel;
 
     private final DefaultListModel<Question> questionsModel = new DefaultListModel<>();
     private final JList<Question> questionsList = new JList<>(questionsModel);
@@ -58,26 +49,22 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener, Su
     private final JButton addQuestionButton = new JButton("➕ הוסף שאלה");
     private final JButton editQuestionButton = new JButton("✏️ ערוך שאלה");
     private final JButton deleteQuestionButton = new JButton("🗑️ מחק שאלה");
-    private final JButton startButton = new JButton("🚀 התחל סקר");
-    private final JLabel communityStatusLabel = new JLabel();
     private final JLabel questionsCountLabel = new JLabel();
-    private final JSpinner delaySpinner =
-            new JSpinner(new SpinnerNumberModel(0, 0, AppConfig.MAX_DELAY_MINUTES, 1));
 
     private final CardLayout questionsCards = new CardLayout();
     private final JPanel questionsCardHolder = new JPanel(questionsCards);
     private final GenerationLoadingCard loadingCard = new GenerationLoadingCard();
     private String generationTopic = "";
     private boolean generating;
-    private int lastCommunitySize;
 
     public SurveyCreationPanel(SurveyManager surveyManager,
                                CommunityManager communityManager,
                                ChatGPTService chatGPTService,
                                Runnable onSurveyStartedCallback) {
-        this.surveyManager = surveyManager;
-        this.communityManager = communityManager;
-        this.onSurveyStartedCallback = onSurveyStartedCallback;
+        this.startPanel = new SurveyStartPanel(surveyManager, communityManager, this::currentQuestions, () -> {
+            questionsModel.clear();
+            onSurveyStartedCallback.run();
+        });
         this.generationController = new QuestionGenerationController(chatGPTService, new GenerationHandler());
 
         setLayout(new BorderLayout(UiTheme.GAP, UiTheme.GAP));
@@ -85,7 +72,7 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener, Su
 
         add(buildModePanel(), BorderLayout.NORTH);
         add(buildQuestionsListPanel(), BorderLayout.CENTER);
-        add(buildStartPanel(), BorderLayout.SOUTH);
+        add(startPanel, BorderLayout.SOUTH);
 
         questionsModel.addListDataListener(new ListDataListener() {
             @Override
@@ -105,7 +92,15 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener, Su
         });
 
         onQuestionsChanged();
-        updateCommunityStatus();
+    }
+
+    /** מסך התזמון וההפעלה — נרשם כמאזין לקהילה ולסקר על ידי החלון הראשי. */
+    public SurveyStartPanel startPanel() {
+        return startPanel;
+    }
+
+    private List<Question> currentQuestions() {
+        return Collections.list(questionsModel.elements());
     }
 
     private JPanel buildModePanel() {
@@ -179,28 +174,6 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener, Su
         return wrapper;
     }
 
-    private JPanel buildStartPanel() {
-        startButton.setFont(startButton.getFont().deriveFont(Font.BOLD, UiTheme.FONT_BUTTON));
-        startButton.addActionListener(e -> onStartSurvey());
-        startButton.setToolTipText(START_TOOLTIP);
-        delaySpinner.setToolTipText("כמה דקות לחכות לפני שהשאלות יישלחו בטלגרם (0 = מיידי, עד "
-                + AppConfig.MAX_DELAY_MINUTES + ")");
-
-        communityStatusLabel.setFont(communityStatusLabel.getFont().deriveFont(Font.PLAIN, UiTheme.FONT_SMALL));
-        communityStatusLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        UiFactory.centered(communityStatusLabel);
-
-        JPanel controlsRow = UiFactory.actionsRow(new JLabel("⏱ תזמון (דקות):"), delaySpinner, startButton);
-        controlsRow.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(BorderFactory.createTitledBorder("תזמון והפעלה"));
-        panel.add(communityStatusLabel);
-        panel.add(controlsRow);
-        return panel;
-    }
-
     private void onQuestionsChanged() {
         boolean isChatGpt = chatGptRadio.isSelected();
         boolean atMax = questionsModel.size() >= Survey.MAX_QUESTIONS;
@@ -215,25 +188,13 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener, Su
         questionsCountLabel.setForeground(atMax && !generating ? UiTheme.WARNING_ORANGE : UiTheme.MUTED_TEXT);
 
         updateQuestionButtonsState();
-        refreshStartButton();
+        startPanel.setBlocked(generating);
     }
 
     private void updateQuestionButtonsState() {
         boolean hasSelection = questionsList.getSelectedIndex() >= 0 && !generating;
         editQuestionButton.setEnabled(hasSelection);
         deleteQuestionButton.setEnabled(hasSelection);
-    }
-
-    /**
-     * הכפתור פעיל רק כשאין סקר פעיל וגם אין סקר ממתין (PENDING) —
-     * אחרת הלחיצה נכשלת רק אחרי חלון האישור, עם «סקר פעיל כבר קיים».
-     */
-    private void refreshStartButton() {
-        boolean busy = surveyManager.isSurveyInProgress();
-        boolean ready = !generating && !busy && lastCommunitySize >= AppConfig.MIN_COMMUNITY_SIZE;
-        startButton.setEnabled(ready);
-        startButton.setToolTipText(busy ? BUSY_TOOLTIP : START_TOOLTIP);
-        delaySpinner.setEnabled(!generating && !busy);
     }
 
     private void onEditSelectedQuestion() {
@@ -266,41 +227,6 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener, Su
         Frame ownerFrame = owner instanceof Frame ? (Frame) owner : null;
         AddQuestionDialog dialog = new AddQuestionDialog(ownerFrame, existing);
         return dialog.showDialog();
-    }
-
-    @Override
-    public void onMemberAdded(CommunityUser newUser, int newCommunitySize) {
-        SwingUtilities.invokeLater(this::updateCommunityStatus);
-    }
-
-    @Override
-    public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
-        SwingUtilities.invokeLater(this::refreshStartButton);
-    }
-
-    @Override
-    public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
-        SwingUtilities.invokeLater(this::refreshStartButton);
-    }
-
-    @Override
-    public void onSurveyCancelled(Survey survey) {
-        SwingUtilities.invokeLater(this::refreshStartButton);
-    }
-
-    private void updateCommunityStatus() {
-        int communitySize = communityManager.getCommunitySize();
-        lastCommunitySize = communitySize;
-        refreshStartButton();
-        if (communitySize >= AppConfig.MIN_COMMUNITY_SIZE) {
-            communityStatusLabel.setText("✅  ניתן להתחיל סקר — " + communitySize + " חברים בקהילה");
-            communityStatusLabel.setForeground(UiTheme.SUCCESS_GREEN);
-        } else {
-            int missing = AppConfig.MIN_COMMUNITY_SIZE - communitySize;
-            communityStatusLabel.setText("⚠️  נדרשים עוד " + missing
-                    + " חברים כדי להתחיל סקר (יש " + communitySize + ")");
-            communityStatusLabel.setForeground(UiTheme.WARNING_ORANGE);
-        }
     }
 
     private void onCancelGeneration() {
@@ -368,68 +294,6 @@ public class SurveyCreationPanel extends JPanel implements CommunityListener, Su
                 ? topic.substring(0, AppConfig.TOPIC_DISPLAY_MAX_CHARS) + "…"
                 : topic;
         return "\"" + trimmed + "\"";
-    }
-
-    private void onStartSurvey() {
-        Integer delayMinutes = readValidatedDelayMinutes();
-        if (delayMinutes == null) {
-            return;
-        }
-        if (questionsModel.isEmpty()) {
-            Dialogs.warn(this, "חסרות שאלות", "הוסף לפחות שאלה אחת!");
-            return;
-        }
-        if (!confirmStart(delayMinutes)) {
-            return;
-        }
-        try {
-            List<Question> questions = new ArrayList<>();
-            for (int i = 0; i < questionsModel.size(); i++) {
-                questions.add(questionsModel.getElementAt(i));
-            }
-            surveyManager.createSurvey(questions, delayMinutes);
-            refreshStartButton();
-            onSurveyStartedCallback.run();
-            questionsModel.clear();
-            Toast.show(this, delayMinutes <= 0
-                            ? "🚀 הסקר נשלח לקהילה!"
-                            : "🚀 הסקר נקבע — יישלח בעוד "
-                            + MessageTemplates.formatDuration(delayMinutes * AppConfig.SECONDS_PER_MINUTE),
-                    Toast.Type.SUCCESS);
-        } catch (IllegalStateException | IllegalArgumentException e) {
-            Dialogs.error(this, e.getMessage());
-        }
-    }
-
-    /**
-     * הטקסט עצמו נבדק (ולא ערך ה-JSpinner), כי ה-JSpinner קוטע בשקט "3.5" ל-3.
-     * מותר רק מספר שלם בין 0 ל-MAX_DELAY_MINUTES.
-     */
-    private Integer readValidatedDelayMinutes() {
-        String raw = ((JSpinner.DefaultEditor) delaySpinner.getEditor()).getTextField().getText().trim();
-        if (!raw.matches("\\d{1,3}") || Integer.parseInt(raw) > AppConfig.MAX_DELAY_MINUTES) {
-            Dialogs.warn(this, "ערך לא תקין",
-                    "זמן הדחייה חייב להיות מספר שלם של דקות בין 0 ל-" + AppConfig.MAX_DELAY_MINUTES
-                            + " (0 = שליחה מיידית).");
-            return null;
-        }
-        int delayMinutes = Integer.parseInt(raw);
-        delaySpinner.setValue(delayMinutes);
-        return delayMinutes;
-    }
-
-    private boolean confirmStart(int delayMinutes) {
-        String timing = delayMinutes <= 0
-                ? "מיידית"
-                : "בעוד " + MessageTemplates.formatDuration(delayMinutes * AppConfig.SECONDS_PER_MINUTE);
-        int durationMinutes = AppConfig.SURVEY_DURATION_SECONDS / AppConfig.SECONDS_PER_MINUTE;
-        String message = "לפתוח את הסקר?\n\n"
-                + "❓ שאלות: " + questionsModel.size() + "\n"
-                + "👥 חברי קהילה שיקבלו את הסקר: " + communityManager.getCommunitySize() + "\n"
-                + "⏱ שליחה: " + timing + "\n"
-                + "🕔 זמן מענה: " + durationMinutes + " דקות\n\n"
-                + "לא ניתן לערוך את השאלות אחרי הפתיחה.";
-        return Dialogs.confirm(this, "אישור פתיחת סקר", message);
     }
 
     private final class GenerationHandler implements QuestionGenerationController.Callbacks {

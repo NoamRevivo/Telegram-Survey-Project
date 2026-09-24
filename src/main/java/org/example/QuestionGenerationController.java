@@ -3,6 +3,8 @@ package org.example;
 import javax.swing.SwingWorker;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * מנהל יצירת השאלות מול ChatGPT: ה-SwingWorker, הביטול והמעבר בין התוצאות.
@@ -19,6 +21,8 @@ final class QuestionGenerationController {
 
         void onCancelled();
     }
+
+    private static final Logger LOG = Logger.getLogger(QuestionGenerationController.class.getName());
 
     private final ChatGPTService service;
     private final Callbacks callbacks;
@@ -64,6 +68,21 @@ final class QuestionGenerationController {
         }
     }
 
+    /**
+     * חריגה בלתי צפויה (NPE וכד') מגיעה בלי הודעה — בלי הטיפול הזה המנהל היה רואה "נכשלה: null".
+     * כשל מוכר (SurveyGenerationException) כבר מנוסח בעברית ומועבר כמות שהוא.
+     */
+    private static String describe(Throwable cause) {
+        if (!(cause instanceof SurveyGenerationException)) {
+            LOG.log(Level.SEVERE, "יצירת השאלות נכשלה בשגיאה בלתי צפויה", cause);
+        }
+        String message = cause.getMessage();
+        if (message == null || message.isBlank()) {
+            return "אירעה שגיאה בלתי צפויה (" + cause.getClass().getSimpleName() + "). נסה שוב.";
+        }
+        return message;
+    }
+
     private void deliverOutcome(SwingWorker<GeneratedSurvey, Void> finished) {
         if (finished.isCancelled()) {
             callbacks.onCancelled();
@@ -78,7 +97,7 @@ final class QuestionGenerationController {
             callbacks.onCancelled();
         } catch (ExecutionException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
-            callbacks.onFailed(cause.getMessage());
+            callbacks.onFailed(describe(cause));
         }
     }
 }

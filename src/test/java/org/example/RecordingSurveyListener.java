@@ -14,6 +14,7 @@ public class RecordingSurveyListener implements SurveyListener {
     public int lastSecondsRemaining = -1;
     public final List<Long> remindedIds = new ArrayList<>();
     public final List<Long> unreachableIds = new ArrayList<>();
+    public final List<Long> deliveryChangedIds = new ArrayList<>();
 
     private boolean closed;
 
@@ -35,6 +36,11 @@ public class RecordingSurveyListener implements SurveyListener {
     @Override
     public void onParticipantUnreachable(SurveyParticipant participant) {
         unreachableIds.add(participant.getUser().getTelegramId());
+    }
+
+    @Override
+    public void onParticipantDeliveryChanged(SurveyParticipant participant) {
+        deliveryChangedIds.add(participant.getUser().getTelegramId());
     }
 
     @Override

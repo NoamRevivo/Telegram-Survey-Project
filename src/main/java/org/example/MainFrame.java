@@ -18,8 +18,10 @@ import java.awt.RenderingHints;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 import java.util.List;
 
+/** החלון הראשי: לשוניות, שורת מצב וחיווט המאזינים למסכים. */
 public class MainFrame extends JFrame {
     private static final String TITLE_RESULTS = "תוצאות";
     private static final String TITLE_RESULTS_LIVE = "תוצאות (חי)";
@@ -38,11 +40,14 @@ public class MainFrame extends JFrame {
     private final SurveyCreationPanel creationPanel;
     private final ActiveSurveyPanel activeSurveyPanel;
     private final ResultsPanel resultsPanel;
-    private final CommunityListener statusBarListener;
-    private final SurveyListener tabsListener;
+    /** המאזינים הרשומים בפועל (עטופים ב-EDT), כדי שאפשר יהיה להסיר בדיוק אותם ב-dispose */
+    private final List<CommunityListener> communityListeners = new ArrayList<>();
+    private final List<SurveyListener> surveyListeners = new ArrayList<>();
 
     private int communitySize;
     private boolean surveyActive;
+    /** הסטטוס «מחובר» מוצג רק אחרי שהבוט נרשם בטלגרם בפועל — החלון עולה קודם */
+    private boolean botConnected;
 
     public MainFrame(CommunityManager communityManager,
                      SurveyManager surveyManager,
@@ -83,19 +88,16 @@ public class MainFrame extends JFrame {
         tabs.addTab(TITLE_RESULTS, AppIcons.results(UiTheme.ICON_TAB), resultsPanel);
         tabs.addChangeListener(e -> clearNewResultsMarker());
 
-        statusBarListener = (newUser, ignoredEventSize) -> SwingUtilities.invokeLater(() -> {
+        registerCommunityListener(communityPanel);
+        registerCommunityListener(creationPanel.startPanel());
+        registerCommunityListener((newUser, ignoredEventSize) -> {
             communitySize = communityManager.getCommunitySize();
             refreshStatusBar();
         });
-        tabsListener = new TabsListener();
-
-        communityManager.addListener(communityPanel);
-        communityManager.addListener(creationPanel);
-        communityManager.addListener(statusBarListener);
-        surveyManager.addSurveyListener(activeSurveyPanel);
-        surveyManager.addSurveyListener(resultsPanel);
-        surveyManager.addSurveyListener(creationPanel);
-        surveyManager.addSurveyListener(tabsListener);
+        registerSurveyListener(activeSurveyPanel);
+        registerSurveyListener(resultsPanel);
+        registerSurveyListener(creationPanel.startPanel());
+        registerSurveyListener(new TabsListener());
 
         add(tabs, BorderLayout.CENTER);
         add(buildStatusBar(), BorderLayout.SOUTH);
@@ -120,6 +122,19 @@ public class MainFrame extends JFrame {
         }
         dispose();
         System.exit(0);
+    }
+
+    /** כל מסך מקבל את האירועים על ה-EDT; ההעברה נעשית כאן, לא בכל מסך בנפרד. */
+    private void registerCommunityListener(CommunityListener listener) {
+        CommunityListener onEdt = EdtCommunityListener.wrap(listener);
+        communityListeners.add(onEdt);
+        communityManager.addListener(onEdt);
+    }
+
+    private void registerSurveyListener(SurveyListener listener) {
+        SurveyListener onEdt = EdtSurveyListener.wrap(listener);
+        surveyListeners.add(onEdt);
+        surveyManager.addSurveyListener(onEdt);
     }
 
     /** אינדקס לפי הרכיב עצמו — לא קבוע ידני שנשבר בשקט כשמוסיפים לשונית. */
@@ -160,9 +175,18 @@ public class MainFrame extends JFrame {
         return statusBar;
     }
 
+    /** נקרא מחוץ ל-EDT (מ-Main) אחרי שרישום הבוט הצליח. */
+    public void markBotConnected() {
+        SwingUtilities.invokeLater(() -> {
+            botConnected = true;
+            refreshStatusBar();
+        });
+    }
+
     private void refreshStatusBar() {
         String surveyPart = surveyActive ? "📋 סקר פעיל כרגע" : "📋 אין סקר פעיל כרגע";
-        statusBar.setText("🟢 מחובר כ-@" + botUsername
+        String connection = botConnected ? "🟢 מחובר כ-@" + botUsername : "🟡 מתחבר לטלגרם…";
+        statusBar.setText(connection
                 + "   |   👥 " + communitySize + " חברים בקהילה   |   " + surveyPart);
     }
 
@@ -172,13 +196,10 @@ public class MainFrame extends JFrame {
      */
     @Override
     public void dispose() {
-        communityManager.removeListener(communityPanel);
-        communityManager.removeListener(creationPanel);
-        communityManager.removeListener(statusBarListener);
-        surveyManager.removeSurveyListener(activeSurveyPanel);
-        surveyManager.removeSurveyListener(resultsPanel);
-        surveyManager.removeSurveyListener(creationPanel);
-        surveyManager.removeSurveyListener(tabsListener);
+        communityListeners.forEach(communityManager::removeListener);
+        surveyListeners.forEach(surveyManager::removeSurveyListener);
+        communityListeners.clear();
+        surveyListeners.clear();
         super.dispose();
     }
 
@@ -186,34 +207,28 @@ public class MainFrame extends JFrame {
     private class TabsListener implements SurveyListener {
         @Override
         public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
-            SwingUtilities.invokeLater(() -> {
-                surveyActive = true;
-                int activeTab = tabIndexOf(activeSurveyPanel);
-                tabs.setIconAt(activeTab, AppIcons.live(UiTheme.ICON_TAB));
-                tabs.setTitleAt(activeTab, TITLE_ACTIVE_LIVE);
-                tabs.setTitleAt(tabIndexOf(resultsPanel), TITLE_RESULTS_LIVE);
-                refreshStatusBar();
-            });
+            surveyActive = true;
+            int activeTab = tabIndexOf(activeSurveyPanel);
+            tabs.setIconAt(activeTab, AppIcons.live(UiTheme.ICON_TAB));
+            tabs.setTitleAt(activeTab, TITLE_ACTIVE_LIVE);
+            tabs.setTitleAt(tabIndexOf(resultsPanel), TITLE_RESULTS_LIVE);
+            refreshStatusBar();
         }
 
         @Override
         public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
-            SwingUtilities.invokeLater(() -> {
-                surveyActive = false;
-                resetTabTitles();
-                revealResults();
-                refreshStatusBar();
-            });
+            surveyActive = false;
+            resetTabTitles();
+            revealResults();
+            refreshStatusBar();
         }
 
         /** סקר שבוטל אינו מקפיץ ללשונית תוצאות ריקה. */
         @Override
         public void onSurveyCancelled(Survey survey) {
-            SwingUtilities.invokeLater(() -> {
-                surveyActive = false;
-                resetTabTitles();
-                refreshStatusBar();
-            });
+            surveyActive = false;
+            resetTabTitles();
+            refreshStatusBar();
         }
 
         private void resetTabTitles() {

@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+/** סקר: שאלות, זמן דחייה וסטטוס. הוולידציה בבנאי. */
 public class Survey {
     public static final int MIN_QUESTIONS = 1;
     public static final int MAX_QUESTIONS = 3;
@@ -21,8 +22,9 @@ public class Survey {
             throw new IllegalArgumentException(
                     "סקר צריך להכיל " + MIN_QUESTIONS + "-" + MAX_QUESTIONS + " שאלות");
         }
-        if (delayMinutes < 0) {
-            throw new IllegalArgumentException("זמן עיכוב לא יכול להיות שלילי");
+        if (delayMinutes < 0 || delayMinutes > AppConfig.MAX_DELAY_MINUTES) {
+            throw new IllegalArgumentException(
+                    "זמן עיכוב חייב להיות בין 0 ל-" + AppConfig.MAX_DELAY_MINUTES + " דקות");
         }
         this.questions = new ArrayList<>(questions);
         this.delayMinutes = delayMinutes;

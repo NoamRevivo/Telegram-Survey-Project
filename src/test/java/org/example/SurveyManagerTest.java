@@ -443,4 +443,79 @@ class SurveyManagerTest {
     void surveyKeepsItsDelayMinutes() {
         assertEquals(7, new Survey(threeQuestions(), 7).getDelayMinutes());
     }
+
+    @Test
+    void cancelPendingSurveyReportsSuccess() {
+        manager.createSurvey(oneQuestion(), 5);
+
+        assertTrue(manager.cancelPendingSurvey());
+    }
+
+    /** הספירה הגיעה ל-0 לפני שהמנהל אישר את הביטול — הקורא מקבל false ולא מניח שהסקר בוטל. */
+    @Test
+    void cancelPendingSurveyReturnsFalseWhenSurveyAlreadyStarted() {
+        manager.createSurvey(oneQuestion(), 1);
+        scheduler.advance(Duration.ofSeconds(61));
+
+        assertFalse(manager.cancelPendingSurvey());
+        assertTrue(manager.isSurveyInProgress());
+        assertEquals(0, listener.cancelledCount);
+    }
+
+    @Test
+    void cancelPendingSurveyReturnsFalseWhenThereIsNoSurvey() {
+        assertFalse(manager.cancelPendingSurvey());
+    }
+
+    /** טיקים של סקר שבוטל אינם משפיעים על הסקר הבא. */
+    @Test
+    void cancelledSurveyTimersDoNotAffectTheNextSurvey() {
+        manager.createSurvey(oneQuestion(), 5);
+        manager.cancelPendingSurvey();
+        manager.createSurvey(oneQuestion(), 0);
+        manager.markDistributionComplete(manager.getCurrentSurvey().getId());
+
+        scheduler.advance(Duration.ofSeconds(AppConfig.SURVEY_DURATION_SECONDS + 5));
+
+        assertEquals(1, listener.startedCount);
+        assertEquals(1, listener.cancelledCount);
+        assertEquals(1, listener.closedCount);
+        assertEquals(0, listener.ticksAfterClose);
+    }
+
+    @Test
+    void deliveryFailureEventFiresOnlyWhenStateChanges() {
+        manager.createSurvey(oneQuestion(), 0);
+        String surveyId = manager.getCurrentSurvey().getId();
+
+        manager.markDeliveryFailed(surveyId, 1L, true);
+        manager.markDeliveryFailed(surveyId, 1L, true);
+        assertEquals(List.of(1L), listener.deliveryChangedIds);
+
+        manager.markDeliveryFailed(surveyId, 1L, false);
+        assertEquals(List.of(1L, 1L), listener.deliveryChangedIds);
+    }
+
+    @Test
+    void deliveryFailureIsIgnoredForUnreachableParticipantsAndStaleSurveys() {
+        manager.createSurvey(oneQuestion(), 0);
+        String surveyId = manager.getCurrentSurvey().getId();
+        manager.markUnreachable(surveyId, 2L);
+
+        manager.markDeliveryFailed(surveyId, 2L, true);
+        manager.markDeliveryFailed("other-survey", 1L, true);
+
+        assertTrue(listener.deliveryChangedIds.isEmpty());
+    }
+
+    @Test
+    void isSurveyRunningIsTrueOnlyAfterTheSurveyWasSent() {
+        assertFalse(manager.isSurveyRunning());
+        manager.createSurvey(oneQuestion(), 5);
+        assertFalse(manager.isSurveyRunning());
+
+        scheduler.advance(Duration.ofSeconds(5 * 60 + 1));
+
+        assertTrue(manager.isSurveyRunning());
+    }
 }

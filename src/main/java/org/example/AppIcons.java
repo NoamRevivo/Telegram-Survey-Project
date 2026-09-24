@@ -9,6 +9,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.Path2D;
 
+/** סמלי הממשק, מצוירים בקוד (בלי קבצי תמונה). */
 public final class AppIcons {
     /** פנימי — הקוד היחיד שמצייר סמלים נמצא במחלקה הזו */
     private interface Painter {

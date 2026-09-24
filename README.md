@@ -31,7 +31,8 @@ export BOT_TOKEN="123456:ABC-DEF..."
 export SURVEY_API_TOKEN="..."
 ```
 
-> הטוקן נשלח ב-header מסוג `Authorization` ולא כפרמטר ב-URL, כדי שלא יירשם בלוגים של שרתים ופרוקסי.
+> שירות יצירת השאלות קורא את הטוקן מפרמטר ה-query בשם `token`, ולכן הוא נשלח שם וגם ב-header מסוג `Authorization`.
+> משמעות: הטוקן עלול להירשם בלוגים של שרתים ופרוקסי בדרך — מומלץ להשתמש בטוקן ייעודי לפרויקט שאפשר לבטל.
 
 ---
 
@@ -85,14 +86,17 @@ mvn test                   # בדיקות בלבד
 mvn test
 ```
 
-68 בדיקות יחידה המכסות את לוגיקת הסקר, התזמון וניהול הקהילה —
+106 בדיקות יחידה המכסות את לוגיקת הסקר, התזמון וניהול הקהילה —
 כולל מניעת מרוץ בין הטיק האחרון לסגירת הסקר, תזכורות למי שטרם סיים,
 ביטול סקר בשלב ההמתנה, משתתף שלא ניתן להשיג, דיווח הפצה מאוחר של סקר קודם,
 והפרדת הרשויות בין חברי קהילה למשתתפי סקר.
 בנוסף: 300 משתתפים שעונים במקביל (900 תשובות, כל אחת נרשמת בדיוק פעם אחת),
 אימות אינדקסים בתוך המנעול, טיימאאוט של סקר קודם שאינו סוגר את הסקר הבא,
 פירוק תשובת ChatGPT (`SurveyJsonParser`), פירוק ה-callback (`CallbackData`),
-פקודות עם פרמטר או תיוג בוט, והפצת ההודעות ב-`BotNotifier` מול שער טלגרם מדומה.
+פקודות עם פרמטר או תיוג בוט, והפצת ההודעות ב-`BotNotifier` מול שער טלגרם מדומה —
+כולל כשל באמצע רצף השאלות והמשכו מהשאלה החסרה, ביטול סקר שכבר יצא, הגבלת קצב תשובות לצ'אט (`ChatThrottle`)
+וניסיונות חוזרים עם המתנה גדלה ב-`TelegramGateway`,
+ובניית הבקשה והטיפול בתשובות ובכשלי רשת ב-`ChatGPTService` מול לקוח HTTP מדומה.
 
 ---
 
@@ -102,12 +106,13 @@ mvn test
 org.example
 ├── ליבה        Survey · Question · SurveyParticipant · CommunityUser · SurveyState
 ├── ניהול       SurveyManager · CommunityManager · SurveyScheduler · Listeners<T>
-├── טלגרם       TelegramGateway (SendResult) · TelegramBotService · BotNotifier ·
-│               CallbackData · MessageTemplates
+├── טלגרם       TelegramGateway (SendResult) · MessageSender · TelegramBotService · BotNotifier ·
+│               ChatThrottle · NamedThreadFactory · CallbackData · MessageTemplates
 ├── ChatGPT     ChatGPTService (HTTP) · SurveyJsonParser (פירוק בלבד) · GeneratedSurvey
 ├── ממשק        MainFrame · CommunityPanel · SurveyCreationPanel · ActiveSurveyPanel ·
-│               ResultsPanel · AddQuestionDialog · GenerationLoadingCard ·
-│               QuestionGenerationController · Toast · UiFactory · Dialogs · UiTheme
+│               SurveyStartPanel · ResultsPanel · AddQuestionDialog · GenerationLoadingCard ·
+│               QuestionGenerationController · EdtSurveyListener · EdtCommunityListener ·
+│               Toast · UiFactory · Dialogs · UiTheme
 └── תצורה       AppConfig
 ```
 

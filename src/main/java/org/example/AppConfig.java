@@ -32,6 +32,10 @@ public final class AppConfig {
     /* ---------- טלגרם ---------- */
     public static final int NOTIFICATION_POOL_SIZE = 4;
     public static final int ACK_POOL_SIZE = 2;
+    /** תשובות לפקודות ולסימון "התשובה שלך" — מחוץ לחוט ה-polling, כדי ש-429 לא יעכב עדכונים נכנסים */
+    public static final int REPLY_POOL_SIZE = 2;
+    /** תשובה אחת לכל היותר בפרק הזמן הזה לכל צ'אט (מגן מפני הצפה ומפני 429 של טלגרם) */
+    public static final long REPLY_MIN_INTERVAL_MILLIS = 1_000L;
     /** מספר הניסיונות המרבי לשליחה כשהכישלון זמני (429, 5xx, תקלת רשת). */
     public static final int SEND_MAX_ATTEMPTS = 3;
     public static final long SEND_BACKOFF_BASE_MILLIS = 500L;
@@ -49,6 +53,9 @@ public final class AppConfig {
     /** תקרה לפנייה כולה, גם כששרת מטפטף בתים ואף פעולת socket בודדת אינה חורגת מ-API_TIMEOUT. */
     public static final Duration API_CALL_TIMEOUT = Duration.ofSeconds(30);
     public static final int RESPONSE_SNIPPET_LENGTH = 200;
+    /** תקרה לגודל תגובת השירות שנטענת לזיכרון */
+    public static final long MAX_RESPONSE_BYTES = 256L * 1024L;
+    public static final int MAX_TOPIC_CHARS = 200;
 
     /* ---------- ממשק המשתמש ---------- */
     public static final int WINDOW_WIDTH = 1050;
@@ -64,6 +71,8 @@ public final class AppConfig {
     public static final int LOADING_BAR_WIDTH = 320;
     public static final int TOPIC_DISPLAY_MAX_CHARS = 40;
     public static final int SLOW_RESPONSE_SECONDS = 12;
+    /** כמה בועות Toast יכולות להיות מוצגות בו-זמנית; מעבר לכך בועה חדשה מוצגת רק אחרי שהקודמות נעלמו */
+    public static final int MAX_STACKED_TOASTS = 3;
     public static final float BAR_WARN_RATIO = 0.5f;
     public static final float BAR_DANGER_RATIO = 0.2f;
 

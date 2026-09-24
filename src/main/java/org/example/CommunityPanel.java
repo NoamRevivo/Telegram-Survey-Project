@@ -5,7 +5,6 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTable;
 import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -18,6 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.Set;
 
+/** מסך «קהילה»: טבלת החברים וסך החברים. מתודות המאזין רצות על ה-EDT — נרשם דרך {@link EdtCommunityListener}. */
 public class CommunityPanel extends JPanel implements CommunityListener {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
@@ -55,14 +55,25 @@ public class CommunityPanel extends JPanel implements CommunityListener {
 
     @Override
     public void onMemberAdded(CommunityUser newUser, int newCommunitySize) {
-        SwingUtilities.invokeLater(() -> {
-            boolean added = addRow(newUser);
-            updateTotalLabel();
-            if (added) {
-                highlightNewRow();
-                Toast.show(this, MessageTemplates.joinToast(newUser), Toast.Type.INFO);
-            }
-        });
+        boolean added = addRow(newUser);
+        // האירוע נבנה מחוץ ל-EDT: אירועים שהגיעו בסדר אחר, או חבר שהתווסף בין הבנייה לרישום, משלימים כאן
+        boolean synced = syncWithManager();
+        updateTotalLabel();
+        if (added || synced) {
+            highlightNewRow();
+        }
+        if (added) {
+            Toast.show(this, MessageTemplates.joinToast(newUser), Toast.Type.INFO);
+        }
+    }
+
+    /** מוסיף לטבלה כל חבר שקיים במנהל ועדיין לא מוצג, לפי סדר ההצטרפות. */
+    private boolean syncWithManager() {
+        boolean any = false;
+        for (CommunityUser user : communityManager.getAllMembers()) {
+            any |= addRow(user);
+        }
+        return any;
     }
 
     private boolean addRow(CommunityUser user) {

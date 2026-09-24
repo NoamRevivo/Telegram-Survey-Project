@@ -75,8 +75,12 @@ final class SurveyJsonParser {
         Set<String> seen = new HashSet<>();
         for (int j = 0; j < optionsArray.length() && options.size() < Question.MAX_OPTIONS; j++) {
             String option = optionsArray.optString(j, "").trim();
-            if (!option.isEmpty() && seen.add(option.toLowerCase())) {
-                options.add(option);
+            if (option.isEmpty()) {
+                continue;
+            }
+            String shortened = Question.truncateOption(option);
+            if (seen.add(Question.optionKey(shortened))) {
+                options.add(shortened);
             }
         }
         return new Question(text, options);

@@ -2,6 +2,7 @@ package org.example;
 
 import java.time.Duration;
 
+/** תזמון משימות לסקר — ניתן להחלפה בשעון וירטואלי בבדיקות. */
 public interface SurveyScheduler {
     Cancellable scheduleOnce(Runnable task, Duration delay);
 

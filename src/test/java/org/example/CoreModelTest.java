@@ -111,4 +111,41 @@ class CoreModelTest {
             logger.setLevel(originalLevel);
         }
     }
+
+    @Test
+    void surveyRejectsDelayOutsideAllowedRange() {
+        List<Question> questions = List.of(new Question("שאלה", List.of("א", "ב")));
+
+        assertThrows(IllegalArgumentException.class, () -> new Survey(questions, -1));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Survey(questions, AppConfig.MAX_DELAY_MINUTES + 1));
+        assertEquals(AppConfig.MAX_DELAY_MINUTES,
+                new Survey(questions, AppConfig.MAX_DELAY_MINUTES).getDelayMinutes());
+    }
+
+    @Test
+    void questionRejectsOptionLongerThanTelegramButtonLimit() {
+        String tooLong = "א".repeat(Question.MAX_OPTION_LENGTH + 1);
+        String exact = "ב".repeat(Question.MAX_OPTION_LENGTH);
+
+        assertThrows(IllegalArgumentException.class, () -> new Question("שאלה", List.of(tooLong, "ג")));
+        assertEquals(2, new Question("שאלה", List.of(exact, "ג")).getOptions().size());
+    }
+
+    @Test
+    void truncateOptionKeepsShortTextAndCutsLongTextWithinTheLimit() {
+        assertEquals("קצר", Question.truncateOption("קצר"));
+
+        String cut = Question.truncateOption("א".repeat(200));
+
+        assertEquals(Question.MAX_OPTION_LENGTH, cut.length());
+        assertTrue(cut.endsWith("…"));
+    }
+
+    @Test
+    void optionKeyIgnoresCaseAndSurroundingSpaces() {
+        assertEquals(Question.optionKey(" Yes "), Question.optionKey("yes"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Question("Q", List.of("Yes", " yes ")));
+    }
 }

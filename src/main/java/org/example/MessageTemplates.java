@@ -32,6 +32,16 @@ public final class MessageTemplates {
         return String.format(template, displayName, since);
     }
 
+    /** מצטרף בזמן סקר פעיל: מבינים מיד שהסקר הנוכחי אינו שלו (הפרדה בין הקהילה למשתתפי הסקר). */
+    public static String welcomeDuringSurvey(String displayName) {
+        return welcome(displayName)
+                + "\nכרגע מתקיים סקר שהתחיל לפני שהצטרפת — תוכל/י להשתתף בסקר הבא.";
+    }
+
+    public static String textOnly() {
+        return "אני מבין רק הודעות טקסט 🙂 שלח/י /start כדי להצטרף לקהילה, או /help לעזרה.";
+    }
+
     public static String help() {
         return "🤖 /start, \"היי\" או \"Hi\" — הצטרפות לקהילה.\n"
                 + "כשנפתח סקר, השאלות יגיעו לכאן עם כפתורי תשובה.\n"
@@ -96,20 +106,13 @@ public final class MessageTemplates {
     }
 
     public static String answerFeedback(SurveyManager.AnswerResult result) {
-        switch (result) {
-            case RECORDED:
-                return "תשובתך נקלטה!";
-            case ALREADY_ANSWERED:
-                return "כבר ענית על שאלה זו.";
-            case SURVEY_NOT_ACTIVE:
-                return "הסקר כבר הסתיים.";
-            case UNKNOWN_PARTICIPANT:
-                return "הצטרפת אחרי שהסקר התחיל — תוכל/י להשתתף בסקר הבא.";
-            case INVALID_ANSWER:
-                return invalidButton();
-            default:
-                return "לא ניתן לקלוט את התשובה.";
-        }
+        return switch (result) {
+            case RECORDED -> "תשובתך נקלטה!";
+            case ALREADY_ANSWERED -> "כבר ענית על שאלה זו.";
+            case SURVEY_NOT_ACTIVE -> "הסקר כבר הסתיים.";
+            case UNKNOWN_PARTICIPANT -> "הצטרפת אחרי שהסקר התחיל — תוכל/י להשתתף בסקר הבא.";
+            case INVALID_ANSWER -> invalidButton();
+        };
     }
 
     public static String invalidButton() {
@@ -126,6 +129,17 @@ public final class MessageTemplates {
 
     public static String callbackFailed() {
         return "לא הצלחתי לקלוט את הלחיצה, נסה/י שוב.";
+    }
+
+    /** שעון לספירה לאחור: mm:ss, ומעל שעה h:mm:ss (דחייה של 120 דקות אינה מוצגת כ-"120:00"). */
+    public static String formatClock(int totalSeconds) {
+        int seconds = Math.max(0, totalSeconds);
+        int hours = seconds / 3600;
+        int minutes = (seconds % 3600) / 60;
+        int rest = seconds % 60;
+        return hours > 0
+                ? String.format("%d:%02d:%02d", hours, minutes, rest)
+                : String.format("%02d:%02d", minutes, rest);
     }
 
     public static String formatDuration(int totalSeconds) {

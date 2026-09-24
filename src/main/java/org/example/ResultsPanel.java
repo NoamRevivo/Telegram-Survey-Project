@@ -9,7 +9,6 @@ import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Component;
@@ -32,6 +31,7 @@ import java.util.Map;
 public class ResultsPanel extends JPanel implements SurveyListener {
     private static final String CARD_EMPTY = "empty";
     private static final String CARD_RESULTS = "results";
+    private static final int PERCENT = 100;
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     private final CardLayout cards = new CardLayout();
@@ -77,55 +77,49 @@ public class ResultsPanel extends JPanel implements SurveyListener {
 
     @Override
     public void onSurveyStarted(Survey survey, List<SurveyParticipant> participants) {
-        SwingUtilities.invokeLater(() -> {
-            this.participants = participants;
-            this.startedAt = survey.getStartTime();
-            this.surveyClosed = false;
-            buildStructure(survey);
-            refreshValues();
-            cards.show(cardHolder, CARD_RESULTS);
-            UiTheme.applyRtl(this);
-            revalidate();
-            repaint();
-        });
+        this.participants = participants;
+        this.startedAt = survey.getStartTime();
+        this.surveyClosed = false;
+        buildStructure(survey);
+        refreshValues();
+        cards.show(cardHolder, CARD_RESULTS);
+        UiTheme.applyRtl(this);
+        revalidate();
+        repaint();
     }
 
     @Override
     public void onAnswerRecorded(SurveyParticipant participant) {
-        SwingUtilities.invokeLater(this::refreshValues);
+        refreshValues();
     }
 
     @Override
     public void onSurveyClosed(Survey survey, List<SurveyParticipant> participants) {
-        SwingUtilities.invokeLater(() -> {
-            this.participants = participants;
-            this.startedAt = survey.getStartTime();
-            this.surveyClosed = true;
-            if (participants.isEmpty()) {
-                cards.show(cardHolder, CARD_EMPTY);
-                return;
-            }
-            if (questionViews.isEmpty()) {
-                buildStructure(survey);
-            }
-            refreshValues();
-            cards.show(cardHolder, CARD_RESULTS);
-            UiTheme.applyRtl(this);
-            revalidate();
-            repaint();
-        });
+        this.participants = participants;
+        this.startedAt = survey.getStartTime();
+        this.surveyClosed = true;
+        if (participants.isEmpty()) {
+            cards.show(cardHolder, CARD_EMPTY);
+            return;
+        }
+        if (questionViews.isEmpty()) {
+            buildStructure(survey);
+        }
+        refreshValues();
+        cards.show(cardHolder, CARD_RESULTS);
+        UiTheme.applyRtl(this);
+        revalidate();
+        repaint();
     }
 
     /** סקר שבוטל לפני השליחה אינו מציג לשונית תוצאות ריקה. */
     @Override
     public void onSurveyCancelled(Survey survey) {
-        SwingUtilities.invokeLater(() -> {
-            participants = new ArrayList<>();
-            questionViews.clear();
-            questionsContainer.removeAll();
-            surveyClosed = false;
-            cards.show(cardHolder, CARD_EMPTY);
-        });
+        participants = new ArrayList<>();
+        questionViews.clear();
+        questionsContainer.removeAll();
+        surveyClosed = false;
+        cards.show(cardHolder, CARD_EMPTY);
     }
 
     private void buildStructure(Survey survey) {
@@ -156,6 +150,11 @@ public class ResultsPanel extends JPanel implements SurveyListener {
         }
     }
 
+    /** אחוז מעוגל; 0 כשאין מכנה, כדי שסקר בלי תשובות לא יציג NaN. */
+    private static int percentOf(long part, long total) {
+        return total == 0 ? 0 : Math.round(part * (float) PERCENT / total);
+    }
+
     private String startedAtSuffix() {
         return startedAt == null ? "" : "  ·  הסקר נפתח ב-" + startedAt.format(TIME_FORMAT);
     }
@@ -167,7 +166,7 @@ public class ResultsPanel extends JPanel implements SurveyListener {
         }
         long completed = participants.stream().filter(SurveyParticipant::isCompleted).count();
         long responded = participants.stream().filter(p -> p.getAnsweredQuestionsCount() > 0).count();
-        int completionPercent = Math.round(completed * 100f / total);
+        int completionPercent = percentOf(completed, total);
         return "✅ השלימו את כל השאלות: " + completed + " מתוך " + total + " (" + completionPercent + "%)"
                 + "   ·   ✍ השיבו לפחות על שאלה אחת: " + responded + " מתוך " + total;
     }
@@ -203,7 +202,7 @@ public class ResultsPanel extends JPanel implements SurveyListener {
                 optionLabel.setPreferredSize(new Dimension(
                         AppConfig.OPTION_LABEL_WIDTH, AppConfig.OPTION_LABEL_HEIGHT));
 
-                JProgressBar bar = new JProgressBar(0, 100);
+                JProgressBar bar = new JProgressBar(0, PERCENT);
                 bar.setStringPainted(true);
                 bar.setString("0% (0)");
                 bar.setForeground(UiTheme.BRAND_BLUE);
@@ -232,7 +231,7 @@ public class ResultsPanel extends JPanel implements SurveyListener {
 
             for (Map.Entry<String, Integer> entry : counts.entrySet()) {
                 int votes = entry.getValue();
-                int percent = totalAnswers == 0 ? 0 : Math.round(votes * 100f / totalAnswers);
+                int percent = percentOf(votes, totalAnswers);
                 boolean isLeading = votes > 0 && votes == leadingVotes;
 
                 JProgressBar bar = barsByOption.get(entry.getKey());
